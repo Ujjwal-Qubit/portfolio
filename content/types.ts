@@ -41,7 +41,8 @@ export interface Project extends BaseEntity {
   solution: string;
   stack: string[];
   roleScope: string;
-  outcome: string;
+  /** Absent when the project has no outcome to claim — render nothing, never a placeholder. */
+  outcome?: string;
 }
 
 export interface Experience extends BaseEntity {

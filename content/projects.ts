@@ -18,7 +18,7 @@ export const projects: Project[] = [
     solution:
       "Scrapes any site via Playwright and audits the UI against design-psychology + accessibility (WCAG) rules; tracks real eye-gaze in-browser with WebGazer.js (privacy-first — stores only (x,y) gaze coordinates + timestamps, no video) to generate attention heatmaps (hotspots vs dead zones); benchmarks against industry standards via Gemini; outputs a UX score and an impact-ranked fix list where each change is approvable in one click, opening a context-aware Gemini chat that returns ready-to-code CSS/Tailwind fixes.",
     roleScope:
-      'Team of 3 ("The ACE"). I originated the concept and built effectively the entire product — product design, backend, and frontend (incl. API integrations and Vercel deployment) — apart from the landing page, which a teammate built.',
+      'Team of 3 ("The ACE"). I originated the concept and owned product design, the backend, all API integrations, and Vercel deployment. A teammate built the frontend/landing page.',
     stack: [
       "React.js",
       "Next.js",
@@ -32,7 +32,8 @@ export const projects: Project[] = [
       "PostgreSQL (Supabase/Neon)",
       "Vercel",
     ],
-    outcome: "Top 10 of 255 teams, HackData 2026 (Shiv Nadar University).",
+    // No outcome and no recognition: this project has no award or placement.
+    // Do not add one — the Outcome section is omitted entirely when absent.
     links: [
       { label: "Live demo", href: "https://aura-design-ai-sand.vercel.app/" },
       { label: "GitHub", href: "https://github.com/Ujjwal-Qubit/AuraDesign.AI" },

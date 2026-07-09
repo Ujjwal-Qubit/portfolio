@@ -76,9 +76,11 @@ export default async function ProjectPage({
           </ul>
         </DetailField>
 
-        <DetailField label="Outcome">
-          <p>{project.outcome}</p>
-        </DetailField>
+        {project.outcome && (
+          <DetailField label="Outcome">
+            <p>{project.outcome}</p>
+          </DetailField>
+        )}
 
         {project.recognition && (
           <DetailField label="Recognition">
