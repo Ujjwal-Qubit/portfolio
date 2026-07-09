@@ -12,12 +12,8 @@ export interface Contact {
 
 // Source of truth: Content Dossier (B2), Checklist B3.
 export const contact: Contact = {
-  github: { label: "GitHub", href: "https://github.com/Ujjwal-Qubit" },
-  // TODO(content): Dossier only captured the LinkedIn link-preview title
-  // ("Ujjwal Kaushik | LinkedIn"), not the actual URL — add the real profile link.
-  linkedin: { label: "LinkedIn" },
-  // TODO(content): Dossier only captured the word "Instagram" as a link-preview
-  // title, not the actual handle/URL — add the real profile link.
-  instagram: { label: "Instagram" },
+  github: { label: "GitHub", href: "https://github.com/Ujjwal-Qubit/" },
+  linkedin: { label: "LinkedIn", href: "https://www.linkedin.com/in/kaushikujjwal/" },
+  instagram: { label: "Instagram", href: "https://www.instagram.com/ujjwal_insane/" },
   email: "ujjwalkaushik672@gmail.com",
 };
