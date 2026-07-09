@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { projects } from "@/content/projects";
+
 const TOKENS = [
   { name: "void", className: "bg-void" },
   { name: "depth", className: "bg-depth" },
@@ -49,6 +52,32 @@ export default function Home() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="flex w-full max-w-2xl flex-col gap-6 border border-depth p-8">
+        <p className="font-mono text-xs uppercase tracking-widest text-mute">
+          Projects
+        </p>
+        <ol className="flex flex-col gap-5">
+          {projects.map((project, index) => (
+            <li key={project.slug}>
+              <Link
+                href={`/projects/${project.slug}`}
+                className="group flex flex-col gap-1"
+              >
+                <span className="font-mono text-xs text-mute">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="font-display text-xl font-bold group-hover:text-signal">
+                  {project.title}
+                </span>
+                <span className="font-body text-sm text-mute">
+                  {project.cardLine}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ol>
       </section>
     </main>
   );
