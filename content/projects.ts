@@ -10,7 +10,6 @@ export const projects: Project[] = [
     cardLine: "Sees what your users actually see — then writes the fix.",
     subtitle:
       "A senior UX consultant who lives in your browser, watches where your users' eyes actually go, and hands back the exact fixes — already written in code.",
-    badge: "Project",
     constellation: "builder",
     context:
       "Businesses lose potential customers not because the product is bad but because the website UI/UX fails in the first few seconds — users miss key info, get confused by layouts, and abandon, driving high bounce rates, low engagement, and poor conversions. Traditional analytics track clicks/scrolls but don't explain what users actually notice or ignore, or why they leave.",
@@ -56,7 +55,6 @@ export const projects: Project[] = [
     cardLine: "One script line turns any site into a multilingual acquisition agent.",
     subtitle:
       "A 24/7 acquisition agent in a single script — it speaks your visitor's language out loud, separates browsers from buyers, and syncs the winners to your CRM.",
-    badge: "Project",
     constellation: "builder",
     context:
       "Small teams, founders, and agencies lose leads because adding a capable chatbot normally means writing code, wiring up a CRM, and juggling analytics across disconnected tools. ConerAI collapses that into a one-line install — a voice-enabled, multilingual AI agent that greets visitors in their own language, qualifies the high-intent ones around the clock, and syncs them straight to the CRM. One acquisition layer instead of a stack of tools.",
@@ -96,7 +94,6 @@ export const projects: Project[] = [
     cardLine: "Recognises returning patients on sight. Records retrieved instantly.",
     subtitle:
       "Knows every returning patient by face — instant ID, instant records, zero re-registration.",
-    badge: "Project",
     constellation: "builder",
     context:
       "Every hospital visit meant re-registering the patient and re-entering their details by hand — even for returning patients — while each patient's treatment history stayed scattered and slow to retrieve. PatientID+ was built to end that repetition: recognise a returning patient on sight and surface their full record instantly. DXP handed me the brief during my first summer internship — the summer after my first year of engineering — a deliberately challenging problem they trusted me to own end-to-end.",
@@ -120,7 +117,6 @@ export const projects: Project[] = [
     cardLine: "One workspace for studying — notes that talk back, tasks, timers.",
     subtitle:
       "The all-in-one study buddy: chats with your notes, remembers your files, and runs your to-do list and timers.",
-    badge: "Project",
     constellation: "builder",
     context:
       "E.D.I.T.H. — Education Dynamic Intelligent Task Handler — is a single workspace built to remove the constant tool-switching students face while studying: AI document chat, document storage, to-do lists, timers, and productivity tracking all in one place instead of scattered across apps. It was built as a Semester-3 project for the IT Solutions subject.",
@@ -152,7 +148,6 @@ export const projects: Project[] = [
     cardLine: "The platform EDC events run on, registration to results.",
     subtitle:
       "The command centre EDC events run on — sign-ups, submissions, shortlisting, and results, all under one login.",
-    badge: "Project",
     constellation: "builder",
     context:
       "Before this existed, EDC ran events on a patchwork of Google Forms — registrations and PPT submissions collected by hand, each presentation then scored externally one by one, and results emailed back manually. The EDC Event Portal replaces all of that: participants and team leaders create accounts, form teams, register, and submit, while organisers manage shortlisting, communication, and results from one system.",
@@ -177,7 +172,6 @@ export const projects: Project[] = [
     cardLine: "A live bidding room where teams buy their problem.",
     subtitle:
       "A live auction room where team leaders bid against each other for the problem their team will battle all day.",
-    badge: "Project",
     constellation: "builder",
     context:
       "Founders' Pit is an EDC event where teams register and submit a PPT proposing a business solution to one of the problem statements set by the Entrepreneurship Development Cell. Shortlisted teams then compete on event day, which opens with a live auction: teams bid for the problem statement they want to solve — easier problems carry a higher base price, harder ones a lower base price — and then spend the full day solving it through a set of tasks. Judging weighs multiple criteria, including how much a team spent at the auction.",

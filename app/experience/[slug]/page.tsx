@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DetailField } from "@/components/DetailField";
 import { experience } from "@/content/experience";
+import { KIND_LABEL } from "@/content/types";
 import { constellationTextClass } from "@/lib/constellation";
 
 export function generateStaticParams() {
@@ -37,7 +38,7 @@ export default async function ExperiencePage({
             entry.constellation ? constellationTextClass[entry.constellation] : "text-mute"
           }`}
         >
-          {entry.badge ?? "Experience"}
+          {KIND_LABEL[entry.kind]}
           {entry.nda ? " · NDA — patterns only" : ""}
         </p>
         <h1 className="font-display text-4xl font-bold sm:text-5xl">

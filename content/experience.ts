@@ -8,7 +8,6 @@ export const experience: Experience[] = [
     title: "FPT Software",
     cardLine: "Sole developer on an enterprise RAG + knowledge-graph system.",
     subtitle: "Building enterprise RAG/LLM systems solo at Vietnam's largest IT company.",
-    badge: "Experience",
     nda: true,
     dates: "23 Jun – 4 Aug 2026",
     location: "Ho Chi Minh City, Vietnam (Onsite, ongoing)",
@@ -40,7 +39,6 @@ export const experience: Experience[] = [
     title: "DXP Software",
     cardLine: "Shipped a production system solo, the summer after first year.",
     subtitle: "Shipped a standalone production system solo across live enterprise projects.",
-    badge: "Experience",
     dates: "Jun 2025 – Jul 2025",
     location: "Ho Chi Minh City, Vietnam (Onsite)",
     context:

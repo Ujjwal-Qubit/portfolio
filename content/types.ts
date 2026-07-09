@@ -28,8 +28,6 @@ export interface BaseEntity {
   cardLine: string;
   /** Longer one-liner shown on the entity's detail page. */
   subtitle: string;
-  /** Short kind label — "Project" / "Experience" / "Leadership". */
-  badge?: string;
   constellation?: Constellation;
   context: string;
   media: MediaItem[];
@@ -65,3 +63,10 @@ export interface Leadership extends BaseEntity {
 }
 
 export type ContentEntity = Project | Experience | Leadership;
+
+/** Badge is derived from `kind`, not stored per entry — see the Dossier's own "type:" line. */
+export const KIND_LABEL: Record<ContentEntity["kind"], string> = {
+  project: "PROJECT",
+  experience: "EXPERIENCE",
+  leadership: "LEADERSHIP",
+};

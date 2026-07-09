@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DetailField } from "@/components/DetailField";
 import { projects } from "@/content/projects";
+import { KIND_LABEL } from "@/content/types";
 import { constellationTextClass } from "@/lib/constellation";
 
 export function generateStaticParams() {
@@ -37,7 +38,7 @@ export default async function ProjectPage({
             project.constellation ? constellationTextClass[project.constellation] : "text-mute"
           }`}
         >
-          {project.badge ?? "Project"}
+          {KIND_LABEL[project.kind]}
         </p>
         <h1 className="font-display text-4xl font-bold sm:text-5xl">
           {project.title}
