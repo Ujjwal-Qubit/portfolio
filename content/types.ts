@@ -1,12 +1,9 @@
 // Shared content types for Project / Experience / Leadership entities.
-// Populated only from the Content Dossier (B2) — see content/*.ts.
+// Populated from the Site Copy (Final) doc — see content/*.ts.
 
 export type Constellation = "signal" | "builder" | "human";
 
-export type MediaKind = "logo" | "screenshot" | "photo";
-
 export interface MediaItem {
-  kind: MediaKind;
   /** Local path under /public/media/<slug>/ — see public/media/README.md. */
   src: string;
   alt: string;
@@ -29,10 +26,15 @@ export interface BaseEntity {
   /** Longer one-liner shown on the entity's detail page. */
   subtitle: string;
   constellation?: Constellation;
+  /** Short meta line: e.g. "2026", "Dec 2024 – Present". */
+  year: string;
+  /** Short meta line: e.g. "Solo · Full-stack". */
+  role: string;
+  /** Short meta line: e.g. "In production", "Live demo". */
+  status: string;
   context: string;
   media: MediaItem[];
   links: LinkItem[];
-  recognition?: string;
 }
 
 export interface Project extends BaseEntity {
@@ -49,7 +51,7 @@ export interface Experience extends BaseEntity {
   kind: "experience";
   dates: string;
   location: string;
-  whatIDid: string;
+  work: string;
   stack: string[];
   outcome: string;
   /** True when the role is under NDA — content is limited to disclosed patterns only. */
@@ -60,12 +62,13 @@ export interface Leadership extends BaseEntity {
   kind: "leadership";
   dates: string;
   roleScope: string;
+  work: string;
   outcome: string;
 }
 
 export type ContentEntity = Project | Experience | Leadership;
 
-/** Badge is derived from `kind`, not stored per entry — see the Dossier's own "type:" line. */
+/** Badge is derived from `kind`, not stored per entry. */
 export const KIND_LABEL: Record<ContentEntity["kind"], string> = {
   project: "PROJECT",
   experience: "EXPERIENCE",
