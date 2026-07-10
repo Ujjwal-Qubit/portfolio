@@ -41,8 +41,9 @@ export function useScrollDriver() {
     });
     writeProgress(trigger.progress);
 
-    // Anchor links (nav, scroll cue) route through Lenis, honoring each
-    // target's scroll-margin-top just like native anchor navigation.
+    // Anchor links (nav, scroll cue) route through Lenis. Lenis itself
+    // honors the target's scroll-margin-top, matching native anchor
+    // navigation — no manual offset.
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0) return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
@@ -54,8 +55,7 @@ export function useScrollDriver() {
       const target = id ? document.getElementById(id) : null;
       if (!target) return;
       event.preventDefault();
-      const margin = parseFloat(getComputedStyle(target).scrollMarginTop) || 0;
-      lenis.scrollTo(target, { offset: -margin });
+      lenis.scrollTo(target);
       history.pushState(null, "", `#${id}`);
     };
     document.addEventListener("click", onClick);
