@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+// Display order mirrors the page's section order (about → projects → …).
 const LINKS = [
-  { label: "Work", href: "#projects" },
   { label: "About", href: "#about" },
+  { label: "Work", href: "#projects" },
   { label: "Journey", href: "#experience" },
   { label: "Contact", href: "#contact" },
 ];
