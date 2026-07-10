@@ -2,6 +2,7 @@
 
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
+import { useScrollDriver } from "./useScrollDriver";
 
 const VOID = "#07070d";
 
@@ -11,6 +12,8 @@ const VOID = "#07070d";
  * once the GL context exists — no layout shift, the div is fixed either way.
  */
 export default function SceneRoot() {
+  useScrollDriver();
+
   const [ready, setReady] = useState(false);
   const [frameloop, setFrameloop] = useState<"always" | "never">("always");
 

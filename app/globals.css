@@ -57,6 +57,22 @@ body {
   }
 }
 
+/* Lenis smooth scroll — these selectors only match while the C5 canvas layer
+   is mounted (Lenis stamps the classes on <html>); otherwise inert. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
 /* Ambient ~3% fractal grain over the void. Fixed, non-interactive. */
 .grain::after {
   content: "";
