@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { About } from "@/components/home/About";
+import { Constellation } from "@/components/home/Constellation";
 import { Hero } from "@/components/home/Hero";
 import { Nav } from "@/components/home/Nav";
 
@@ -12,6 +14,8 @@ export default function Home() {
     <main className="grain relative flex-1 bg-void text-ink">
       <Nav />
       <Hero />
+      <Constellation />
+      <About />
     </main>
   );
 }

@@ -29,9 +29,9 @@ export function Hero() {
 
       <a
         href="#constellation"
-        className="pulse-slow absolute bottom-10 left-1/2 -translate-x-1/2 font-mono text-[11px] uppercase tracking-[0.35em] text-mute transition-colors hover:text-ink"
+        className="pulse-slow absolute bottom-10 left-1/2 w-max max-w-[calc(100vw-3rem)] -translate-x-1/2 text-center font-mono text-[11px] uppercase tracking-[0.35em] text-mute transition-colors hover:text-ink"
       >
-        Make sense of this ↓
+        Make sense of <span className="whitespace-nowrap">this&nbsp;↓</span>
       </a>
     </section>
   );
