@@ -24,7 +24,8 @@ const BADGE_TINT: Record<string, string> = {
 };
 
 const CARD = "rounded-2xl border border-signal/20 bg-depth/60 p-6 backdrop-blur-sm sm:p-8";
-const FRAME = "relative overflow-hidden rounded-2xl border border-signal/20 bg-depth";
+// bg-void, not bg-depth: object-contain letterboxes against the page background.
+const FRAME = "relative overflow-hidden rounded-2xl border border-signal/20 bg-void";
 const LABEL = "font-mono text-[11px] uppercase tracking-[0.25em] text-mute";
 
 function pad(n: number) {
@@ -69,18 +70,8 @@ function Frame({ item, aspect, priority }: { item: MediaItem; aspect: string; pr
         fill
         priority={priority}
         sizes="(max-width: 768px) 100vw, 896px"
-        className="object-cover"
+        className="object-contain"
       />
-    </div>
-  );
-}
-
-function PlaceholderFrame() {
-  return (
-    <div className="grid aspect-video place-items-center rounded-2xl border border-dashed border-signal/30 bg-depth/40">
-      <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-mute">
-        [ Media coming soon ]
-      </p>
     </div>
   );
 }
@@ -182,8 +173,8 @@ export function DetailPage({
           </div>
         </header>
 
-        {/* 5 — Hero media */}
-        {hero ? <Frame item={hero} aspect="aspect-video" priority /> : <PlaceholderFrame />}
+        {/* 5 — Hero media. Entities with no media render nothing here. */}
+        {hero && <Frame item={hero} aspect="aspect-video" priority />}
 
         {/* 6 — Context */}
         <Row label="Context">
@@ -263,11 +254,15 @@ export function DetailPage({
           </section>
         )}
 
-        {/* 10 — Secondary media */}
+        {/* 10 — Secondary media. A lone image spans full width instead of half. */}
         {rest.length > 0 && (
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className={`grid gap-5 ${rest.length > 1 ? "sm:grid-cols-2" : ""}`}>
             {rest.map((item) => (
-              <Frame key={item.src} item={item} aspect="aspect-[4/3]" />
+              <Frame
+                key={item.src}
+                item={item}
+                aspect={rest.length > 1 ? "aspect-[4/3]" : "aspect-video"}
+              />
             ))}
           </div>
         )}
