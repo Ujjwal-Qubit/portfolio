@@ -37,6 +37,9 @@ export const projects: Project[] = [
     ],
     // No outcome: this project has no award or placement.
     // Do not add one — the Outcome section is omitted entirely when absent.
+    // cardStat is a capability descriptor for the homepage card only, not an outcome.
+    cardStat:
+      "AI UX auditor that scrapes websites, generates privacy-first eye-gaze heatmaps, benchmarks against WCAG and industry standards, and delivers one-click, ready-to-code UI fixes.",
     links: [
       { label: "Live demo", href: "https://aura-design-ai-sand.vercel.app/" },
       { label: "GitHub", href: "https://github.com/Ujjwal-Qubit/AuraDesign.AI" },

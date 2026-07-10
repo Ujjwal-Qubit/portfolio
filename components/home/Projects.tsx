@@ -25,7 +25,9 @@ export function Projects() {
 
         <div className="grid gap-5 md:grid-cols-2">
           {projects.map((project, i) => {
-            const stat = project.outcome ? splitOutcome(project.outcome).headline : null;
+            const stat = project.outcome
+              ? splitOutcome(project.outcome).headline
+              : (project.cardStat ?? null);
             return (
               <Reveal key={project.slug} delay={(i % 2) * 0.08} className="h-full">
                 <Link

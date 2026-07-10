@@ -45,6 +45,12 @@ export interface Project extends BaseEntity {
   roleScope: string;
   /** Absent when the project has no outcome to claim — render nothing, never a placeholder. */
   outcome?: string;
+  /**
+   * Homepage-card-only descriptor for the bottom stat slot, used when there is
+   * no `outcome`. Capability summary, not a claimed result — never shown on
+   * the detail page.
+   */
+  cardStat?: string;
 }
 
 export interface Experience extends BaseEntity {
