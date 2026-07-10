@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { About } from "@/components/home/About";
 import { Constellation } from "@/components/home/Constellation";
+import { Contact } from "@/components/home/Contact";
 import { Hero } from "@/components/home/Hero";
 import { Journey } from "@/components/home/Journey";
 import { Leadership } from "@/components/home/Leadership";
@@ -22,6 +23,10 @@ export default function Home() {
       <Projects />
       <Journey />
       <Leadership />
+      <Contact />
+      <footer className="pb-8 text-center font-mono text-[10px] uppercase tracking-[0.3em] text-mute/70">
+        Signal from Noise · © 2026 Ujjwal Kaushik
+      </footer>
     </main>
   );
 }
