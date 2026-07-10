@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { DetailField } from "@/components/DetailField";
 import { experience } from "@/content/experience";
@@ -45,6 +46,9 @@ export default async function ExperiencePage({
           {entry.title}
         </h1>
         <p className="font-body text-lg text-mute">{entry.subtitle}</p>
+        <p className="font-mono text-xs text-mute">
+          {entry.year} · {entry.role} · {entry.status}
+        </p>
       </div>
 
       <div className="flex w-full max-w-2xl flex-col gap-8 border border-depth p-8">
@@ -60,8 +64,8 @@ export default async function ExperiencePage({
           <p>{entry.context}</p>
         </DetailField>
 
-        <DetailField label="What I did">
-          <p>{entry.whatIDid}</p>
+        <DetailField label="The work">
+          <p>{entry.work}</p>
         </DetailField>
 
         <DetailField label="Stack">
@@ -80,12 +84,6 @@ export default async function ExperiencePage({
         <DetailField label="Outcome">
           <p>{entry.outcome}</p>
         </DetailField>
-
-        {entry.recognition && (
-          <DetailField label="Recognition">
-            <p>{entry.recognition}</p>
-          </DetailField>
-        )}
 
         {entry.links.length > 0 && (
           <DetailField label="Links">
@@ -113,15 +111,22 @@ export default async function ExperiencePage({
           </DetailField>
         )}
 
-        {entry.media.length > 0 && (
-          // TODO(content): media files not yet dropped in — see /public/media/README.md
-          <DetailField label="Media">
-            <p className="text-mute">
-              {entry.media.length} item{entry.media.length > 1 ? "s" : ""} pending — see{" "}
-              <code>/public/media/{entry.slug}</code>.
-            </p>
-          </DetailField>
-        )}
+        <DetailField label="Media">
+          {entry.media.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {entry.media.map((item) => (
+                <div
+                  key={item.src}
+                  className="relative aspect-video overflow-hidden border border-depth bg-depth"
+                >
+                  <Image src={item.src} alt={item.alt} fill className="object-cover" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-mute">No media for this entry.</p>
+          )}
+        </DetailField>
       </div>
     </main>
   );
