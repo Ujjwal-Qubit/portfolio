@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ContentEntity, LinkItem, MediaItem } from "@/content/types";
 import { KIND_LABEL } from "@/content/types";
+import { splitOutcome } from "@/lib/text";
 
 /**
  * Detail-route base + footer label per kind. `index` points at the homepage
@@ -30,16 +31,6 @@ const LABEL = "font-mono text-[11px] uppercase tracking-[0.25em] text-mute";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
-}
-
-/** Split an outcome into a headline sentence and its supporting remainder. */
-function splitOutcome(outcome: string) {
-  const end = outcome.indexOf(". ");
-  if (end === -1) return { headline: outcome, support: null };
-  return {
-    headline: outcome.slice(0, end + 1),
-    support: outcome.slice(end + 2).trim() || null,
-  };
 }
 
 function Meta({ label, value }: { label: string; value: string }) {

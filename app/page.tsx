@@ -3,6 +3,7 @@ import { About } from "@/components/home/About";
 import { Constellation } from "@/components/home/Constellation";
 import { Hero } from "@/components/home/Hero";
 import { Nav } from "@/components/home/Nav";
+import { Projects } from "@/components/home/Projects";
 
 export const metadata: Metadata = {
   title: "Ujjwal Kaushik — Full-stack & AI",
@@ -16,6 +17,7 @@ export default function Home() {
       <Hero />
       <Constellation />
       <About />
+      <Projects />
     </main>
   );
 }
