@@ -19,6 +19,16 @@
   color-scheme: dark;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 body {
   background: var(--color-void);
   color: var(--color-ink);
@@ -28,6 +38,23 @@ body {
   outline: 2px solid var(--color-signal);
   outline-offset: 3px;
   border-radius: 2px;
+}
+
+/* Gentle opacity pulse — scroll cue and "current" markers. Never under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes pulse-slow {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .pulse-slow {
+    animation: pulse-slow 3.4s ease-in-out infinite;
+  }
 }
 
 /* Ambient ~3% fractal grain over the void. Fixed, non-interactive. */
