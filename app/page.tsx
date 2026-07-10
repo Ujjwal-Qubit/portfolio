@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { CanvasLayer } from "@/components/canvas/CanvasLayer";
 import { About } from "@/components/home/About";
 import { Constellation } from "@/components/home/Constellation";
 import { Contact } from "@/components/home/Contact";
@@ -15,7 +16,10 @@ export const metadata: Metadata = {
 
 export default function Home() {
   return (
-    <main className="grain relative flex-1 bg-void text-ink">
+    // No bg on <main>: body paints the void, so the fixed canvas can sit at
+    // negative z behind all content while remaining visible.
+    <main className="grain relative flex-1 text-ink">
+      <CanvasLayer />
       <Nav />
       <Hero />
       <Constellation />
