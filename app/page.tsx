@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { About } from "@/components/home/About";
 import { Constellation } from "@/components/home/Constellation";
 import { Hero } from "@/components/home/Hero";
+import { Journey } from "@/components/home/Journey";
+import { Leadership } from "@/components/home/Leadership";
 import { Nav } from "@/components/home/Nav";
 import { Projects } from "@/components/home/Projects";
 
@@ -18,6 +20,8 @@ export default function Home() {
       <Constellation />
       <About />
       <Projects />
+      <Journey />
+      <Leadership />
     </main>
   );
 }

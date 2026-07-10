@@ -64,6 +64,8 @@ export interface Leadership extends BaseEntity {
   roleScope: string;
   work: string;
   outcome: string;
+  /** Short mono stat chips for the homepage card — confirmed facts only. */
+  stats?: string[];
 }
 
 export type ContentEntity = Project | Experience | Leadership;

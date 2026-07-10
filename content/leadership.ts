@@ -20,6 +20,7 @@ export const leadership: Leadership[] = [
       "Lead 8 engineers — assign tasks, review submissions, clear blockers, run growth sprints; coordinate with non-technical departments to scope + deliver.",
     outcome:
       "Own and maintain the main EDC website; as backend lead, built and shipped both the Event Portal and the Auction System, now in production at institutional events.",
+    stats: ["8 ENGINEERS", "EVENT PORTAL — LIVE", "AUCTION SYSTEM — LIVE"],
     links: [{ label: "EDC JSS", href: "https://www.edcjssun.com/" }],
     // TODO(content): no media supplied yet for this entry — add real image(s) when available.
     media: [],
@@ -42,6 +43,7 @@ export const leadership: Leadership[] = [
       "Lead CP initiatives for 100+ students; organise events and mentor peers in DSA and problem-solving.",
     outcome:
       "Organised Code Genesis, a 3-week DSA Bootcamp (172 registrations), and a timed HackerRank contest, while mentoring peers across the cohort.",
+    stats: ["100+ STUDENTS", "172 BOOTCAMP REGISTRATIONS", "CODE GENESIS"],
     links: [],
     media: [
       { src: "/media/cpc-coordinator/01.png", alt: "Competitive Programming Cell — DSA Bootcamp" },
