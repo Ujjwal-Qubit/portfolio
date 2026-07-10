@@ -3,7 +3,9 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { BEATS } from "@/lib/canvas/beats";
 import { mulberry32 } from "@/lib/canvas/random";
+import { useCanvasStore } from "@/lib/canvas/store";
 
 const COUNT = 240;
 const BASE_OPACITY = 0.22;
@@ -44,6 +46,12 @@ export function Dust() {
   useFrame((_, delta) => {
     const points = pointsRef.current;
     if (!points) return;
+    // Fade out with the glyph field over the ignition beat, scrubbed.
+    const p = useCanvasStore.getState().scrollProgress;
+    const fieldOpacity =
+      1 - THREE.MathUtils.smoothstep(p, BEATS.ignition.start, BEATS.ignition.end);
+    material.opacity = BASE_OPACITY * fieldOpacity;
+    points.visible = fieldOpacity > 0.004;
     points.rotation.y += delta * 0.004; // barely-there churn
   });
 

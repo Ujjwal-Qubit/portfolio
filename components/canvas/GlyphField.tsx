@@ -3,6 +3,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { BEATS } from "@/lib/canvas/beats";
 import { CONSTELLATION_HEX, GLYPHS } from "@/lib/canvas/glyphs";
 import type { GlyphDef } from "@/lib/canvas/glyphs";
 import { hashString, mulberry32 } from "@/lib/canvas/random";
@@ -124,9 +125,22 @@ export function GlyphField() {
   useFrame((state, delta) => {
     const group = groupRef.current;
     if (!group) return;
-    const { pointer } = useCanvasStore.getState();
+    const { pointer, scrollProgress: p } = useCanvasStore.getState();
 
-    driftTime.current += delta;
+    // Beat 1 "ignition" — pure functions of scroll progress, so scrubbing
+    // back to the top reverses cleanly. As the hero scrolls away the drift
+    // quickens, the field disperses outward, and everything fades down by
+    // the time the constellation strip arrives.
+    const ignite = THREE.MathUtils.smoothstep(p, 0, BEATS.ignition.end);
+    const fieldOpacity =
+      1 - THREE.MathUtils.smoothstep(p, BEATS.ignition.start, BEATS.ignition.end);
+    const speedMult = 1 + 1.5 * ignite;
+    const disperse = 1 + 0.4 * ignite;
+
+    group.visible = fieldOpacity > 0.004;
+    if (!group.visible) return;
+
+    driftTime.current += delta * speedMult;
     const t = driftTime.current;
 
     // Parallax: lean away from the cursor. Damped (inertial) and capped by
@@ -141,21 +155,27 @@ export function GlyphField() {
       const item = itemRefs.current[i];
       if (!item) continue;
 
+      // disperse scales the offset from screen center, pushing the field
+      // outward as ignition ramps (and back in when scrolling up).
       item.position.set(
-        glyph.center.x + glyph.radiusX * Math.cos(t * glyph.orbitSpeed + glyph.phaseA),
-        glyph.center.y + glyph.radiusY * Math.sin(t * glyph.orbitSpeed * 0.8 + glyph.phaseB),
+        (glyph.center.x + glyph.radiusX * Math.cos(t * glyph.orbitSpeed + glyph.phaseA)) *
+          disperse,
+        (glyph.center.y +
+          glyph.radiusY * Math.sin(t * glyph.orbitSpeed * 0.8 + glyph.phaseB)) *
+          disperse,
         glyph.center.z + glyph.zAmp * Math.sin(t * glyph.orbitSpeed * 1.3 + glyph.phaseC),
       );
-      item.rotation.x += glyph.spin.x * delta;
-      item.rotation.y += glyph.spin.y * delta;
-      item.rotation.z += glyph.spin.z * delta;
+      const spinScale = delta * (0.6 + 0.4 * speedMult);
+      item.rotation.x += glyph.spin.x * spinScale;
+      item.rotation.y += glyph.spin.y * spinScale;
+      item.rotation.z += glyph.spin.z * spinScale;
 
       // Dim near screen center so the hero type always dominates.
       item.getWorldPosition(worldPos).project(state.camera);
       const centerDist = Math.hypot(worldPos.x, worldPos.y);
       const dim = 0.35 + 0.65 * THREE.MathUtils.smoothstep(centerDist, 0.12, 0.5);
-      glyph.edgeMaterial.opacity = BASE_EDGE_OPACITY * dim;
-      glyph.faceMaterial.opacity = BASE_FACE_OPACITY;
+      glyph.edgeMaterial.opacity = BASE_EDGE_OPACITY * dim * fieldOpacity;
+      glyph.faceMaterial.opacity = BASE_FACE_OPACITY * fieldOpacity;
     }
   });
 
