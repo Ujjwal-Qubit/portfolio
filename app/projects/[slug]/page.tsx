@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { DetailField } from "@/components/DetailField";
 import { projects } from "@/content/projects";
@@ -44,6 +45,9 @@ export default async function ProjectPage({
           {project.title}
         </h1>
         <p className="font-body text-lg text-mute">{project.subtitle}</p>
+        <p className="font-mono text-xs text-mute">
+          {project.year} · {project.role} · {project.status}
+        </p>
       </div>
 
       <div className="flex w-full max-w-2xl flex-col gap-8 border border-depth p-8">
@@ -82,12 +86,6 @@ export default async function ProjectPage({
           </DetailField>
         )}
 
-        {project.recognition && (
-          <DetailField label="Recognition">
-            <p>{project.recognition}</p>
-          </DetailField>
-        )}
-
         {project.links.length > 0 && (
           <DetailField label="Links">
             <ul className="flex flex-col gap-1">
@@ -114,15 +112,22 @@ export default async function ProjectPage({
           </DetailField>
         )}
 
-        {project.media.length > 0 && (
-          // TODO(content): media files not yet dropped in — see /public/media/README.md
-          <DetailField label="Media">
-            <p className="text-mute">
-              {project.media.length} item{project.media.length > 1 ? "s" : ""} pending — see{" "}
-              <code>/public/media/{project.slug}</code>.
-            </p>
-          </DetailField>
-        )}
+        <DetailField label="Media">
+          {project.media.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {project.media.map((item) => (
+                <div
+                  key={item.src}
+                  className="relative aspect-video overflow-hidden border border-depth bg-depth"
+                >
+                  <Image src={item.src} alt={item.alt} fill className="object-cover" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-mute">No media for this entry.</p>
+          )}
+        </DetailField>
       </div>
     </main>
   );

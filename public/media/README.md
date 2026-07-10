@@ -1,34 +1,41 @@
 # /public/media
 
-Local image files referenced by `content/*.ts`. The Content Dossier's image
-URLs are temporary Notion links that expire, so content files reference
-local paths here instead — the actual files need to be dropped in by hand.
+Local image files referenced by `content/*.ts`. Each entity gets its own
+folder, named after its `slug`.
 
-Each entity gets its own folder, named after its `slug`.
+## Needed now (referenced in content/projects.ts, content/experience.ts, content/leadership.ts)
 
-## Needed now (referenced in content/projects.ts)
+None of these files have been dropped in yet — every path below is wired
+into the matching content entry, but the folder currently only holds a
+`.gitkeep`. Drop the real file in and it'll render.
 
-| Path                                  | What goes here                        |
-|----------------------------------------|----------------------------------------|
-| `auradesign/logo.png`                  | AuraDesign.AI logo                     |
-| `auradesign/landing.png`               | AuraDesign.AI landing page screenshot  |
-| `coner-ai/logo.png`                    | ConerAI logo                           |
-| `coner-ai/landing.png`                 | ConerAI landing page screenshot        |
+| Path                                    | What goes here                        |
+|-------------------------------------------|------------------------------------------|
+| `auradesign/logo.png`                    | AuraDesign.AI logo                       |
+| `auradesign/landing.png`                 | AuraDesign.AI landing page screenshot    |
+| `coner-ai/logo.png`                      | ConerAI logo                             |
+| `coner-ai/landing.png`                   | ConerAI landing page screenshot          |
+| `edith/screenshot.png`                   | E.D.I.T.H. workspace screenshot          |
+| `edc-registration/01.png`                | EDC Event Portal screenshot 1            |
+| `edc-registration/02.png`                | EDC Event Portal screenshot 2            |
+| `edc-auction/01.png`                     | EDC Auction System screenshot 1          |
+| `edc-auction/02.png`                     | EDC Auction System screenshot 2          |
+| `fpt-software/01.png`                    | FPT Software screenshot                  |
+| `dxp-software/01.png`                    | DXP Software screenshot 1                |
+| `dxp-software/02.png`                    | DXP Software screenshot 2                |
+| `cpc-coordinator/01.png`                 | CPC Coordinator photo                    |
 
-Every reference above is marked `// TODO(content)` at its call site in
-`content/projects.ts`.
+Also needed: `/public/photo.png` (profile photo, referenced from
+`content/profile.ts`) — not under `/media`, belongs at the `public` root.
 
-## Not yet referenced
+## No media by design
 
-The Dossier's Media section was blank (or explicitly `TODO`) for every
-other entity — E.D.I.T.H., EDC Event Portal, EDC Auction System, FPT
-Software, DXP Software, EDC Technical Lead, and CPC Coordinator — so no
-local media paths were invented for them. PatientID+ is confirmed private
-client work with nothing shareable, so it has none by design.
+- **PatientID+** (`patientid`) — private client work, nothing shareable.
+- **EDC Technical Lead** (`edc-technical-lead`) — none supplied yet; marked
+  `// TODO(content)` in `content/leadership.ts`.
 
-If real images turn up for any of these later, add a
-`public/media/<slug>/` folder and wire the path into the matching entry in
-`content/projects.ts`, `content/experience.ts`, or `content/leadership.ts`.
+Both render a clean "No media for this entry" placeholder instead of a
+broken `<img>`.
 
 ## Résumé
 
