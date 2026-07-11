@@ -510,6 +510,9 @@ export function SignalField() {
     const latticeIn = THREE.MathUtils.smoothstep(synthP, 0.45, 0.75);
     const labelIn = THREE.MathUtils.smoothstep(synthP, 0.62, 0.82);
     const dockP = THREE.MathUtils.smoothstep(synthP, 0.8, 1);
+    // Beats 4–8: while docked the Lattice recedes — content owns the page,
+    // the canvas is furniture.
+    const latticeDim = 1 - 0.25 * dockP;
 
     const w = state.size.width;
     const h = state.size.height;
@@ -641,7 +644,7 @@ export function SignalField() {
       glyph.dotMaterial.color.lerpColors(hues.ink, hues[glyph.group], morphP);
       glyph.dotMaterial.opacity = THREE.MathUtils.lerp(
         DOT_OPACITY * dim,
-        0.35 + depth * 0.65,
+        (0.35 + depth * 0.65) * latticeDim,
         morphP,
       );
 
@@ -649,7 +652,7 @@ export function SignalField() {
       // until the bloom pass lands).
       const glow = glowRefs.current[i];
       if (glow) {
-        const glowAlpha = latticeIn * (0.12 + depth * 0.38);
+        const glowAlpha = latticeIn * latticeDim * (0.12 + depth * 0.38);
         glowMaterials[i].opacity = glowAlpha;
         glow.visible = glowAlpha > 0.004;
         if (glow.visible) glow.scale.setScalar(nodeRadius * 7);
@@ -787,7 +790,7 @@ export function SignalField() {
         const bx = nodePX[b];
         const by = nodePY[b];
         const eDepth = (nodeDepth[a] + nodeDepth[b]) / 2;
-        const alpha = (0.08 + eDepth * 0.38) * latticeIn;
+        const alpha = (0.08 + eDepth * 0.38) * latticeIn * latticeDim;
         const halfWidth = (0.8 + eDepth * 0.8) / 2;
         let dx = bx - ax;
         let dy = by - ay;
@@ -818,7 +821,7 @@ export function SignalField() {
 
     const core = coreGlowRef.current;
     if (core) {
-      const coreAlpha = 0.07 * latticeIn;
+      const coreAlpha = 0.07 * latticeIn * latticeDim;
       coreGlowMaterial.opacity = coreAlpha;
       core.visible = coreAlpha > 0.004;
       if (core.visible) {
