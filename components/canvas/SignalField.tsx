@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { rangeProgress } from "@/lib/canvas/beats";
 import { CONSTELLATION_HEX, GLYPHS } from "@/lib/canvas/glyphs";
 import type { GlyphConstellation } from "@/lib/canvas/glyphs";
+import { buildLattice } from "@/lib/canvas/lattice";
 import { mulberry32 } from "@/lib/canvas/random";
 import { useCanvasStore } from "@/lib/canvas/store";
 
@@ -41,6 +42,13 @@ const SYNAPSE_OPACITY = 0.22;
 /** Beat 2: clustered glyphs keep a small local float so drift never dies. */
 const CLUSTER_FLOAT_PX = 7;
 
+// Beat 3 — THE LATTICE (prototype numbers; px are CSS px).
+const LATTICE_PERSP = 1100;
+/** Prototype radius at the 1440×900 design size; scaled to the viewport. */
+const LATTICE_R_BASE = 265;
+const NODE_LABEL_GAP = 8;
+const MAX_LATTICE_EDGES = 36;
+
 /**
  * Labels are canvas-texture sprites drawn with the real JetBrains Mono TTF,
  * loaded explicitly via the FontFace API so metrics are deterministic — no
@@ -54,10 +62,14 @@ const LABEL_SCALE = 4;
 
 const GROUPS: GlyphConstellation[] = ["builder", "mind", "human"];
 
-/** Proximity pairs + the 6-pair web inside each of the 3 constellations. */
+/**
+ * Line budget: hero proximity pairs + the 6-pair web inside each of the 3
+ * constellations + the inter-cluster synapses of beat 3 (bounded by the
+ * lattice edge count).
+ */
 const PROXIMITY_PAIRS = (GLYPHS.length * (GLYPHS.length - 1)) / 2;
 const WEB_PAIRS = 3 * 6;
-const MAX_SEGMENTS = PROXIMITY_PAIRS + WEB_PAIRS;
+const MAX_SEGMENTS = PROXIMITY_PAIRS + WEB_PAIRS + MAX_LATTICE_EDGES;
 
 /** Intra-constellation pairs, precomputed: [i, j, groupIndex, stagger 0..5]. */
 const CLUSTER_WEB: Array<[number, number, number, number]> = (() => {
@@ -251,6 +263,47 @@ function clusterAnchor(group: number, w: number, h: number, out: number[]) {
   out[1] = h * (group === 1 ? 0.56 : 0.62);
 }
 
+/** Soft radial falloff, shared by node glows and the core glow. */
+function makeGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.35, "rgba(255,255,255,0.35)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 64, 64);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+/**
+ * Where the Lattice docks after synthesis, in CSS px — bottom-right, clear
+ * of nav and content flow; smaller and further inset as viewports narrow.
+ */
+function dockTarget(w: number, h: number, out: { x: number; y: number; r: number }) {
+  if (w < 640) {
+    out.x = w - 78;
+    out.y = h - 96;
+    out.r = 46;
+  } else if (w < 1024) {
+    out.x = w - 112;
+    out.y = h - 126;
+    out.r = 62;
+  } else {
+    out.x = w - 150;
+    out.y = h - 150;
+    out.r = 84;
+  }
+}
+
 /**
  * Renders one label into its canvas at LABEL_SCALE× and records the plane
  * size in CSS px. Only called once the TTF is resident (or its load failed),
@@ -278,31 +331,118 @@ function drawLabel(glyph: GlyphInstance) {
 
 export function SignalField() {
   const glyphs = useMemo(buildGlyphs, []);
+  const lattice = useMemo(buildLattice, []);
   const groupRef = useRef<THREE.Group>(null);
   const itemRefs = useRef<(THREE.Group | null)[]>([]);
   const polyRefs = useRef<(THREE.Group | null)[]>([]);
   const labelRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const dotRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const glowRefs = useRef<(THREE.Mesh | null)[]>([]);
+  const coreGlowRef = useRef<THREE.Mesh>(null);
   const driftTime = useRef(0);
 
-  // Per-frame scratch: glyph centers (CSS px), dim factors, cluster ease.
+  /** glyph index → its lattice node index. */
+  const nodeOfGlyph = useMemo(() => {
+    const map = new Int32Array(GLYPHS.length);
+    lattice.nodes.forEach((node, i) => {
+      map[node.glyphIndex] = i;
+    });
+    return map;
+  }, [lattice]);
+
+  // Per-frame scratch: glyph centers (CSS px), dim factors, cluster ease,
+  // projected lattice node positions + depths.
   const posX = useMemo(() => new Float32Array(GLYPHS.length), []);
   const posY = useMemo(() => new Float32Array(GLYPHS.length), []);
   const dims = useMemo(() => new Float32Array(GLYPHS.length), []);
   const clusterEase = useMemo(() => new Float32Array(GLYPHS.length), []);
+  const nodePX = useMemo(() => new Float32Array(GLYPHS.length), []);
+  const nodePY = useMemo(() => new Float32Array(GLYPHS.length), []);
+  const nodeDepth = useMemo(() => new Float32Array(GLYPHS.length), []);
   const anchorScratch = useMemo(() => [0, 0], []);
+  const dockScratch = useMemo(() => ({ x: 0, y: 0, r: 0 }), []);
 
   const dotGeometry = useMemo(() => new THREE.CircleGeometry(DOT_RADIUS, 16), []);
   const planeGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+  const glowTexture = useMemo(makeGlowTexture, []);
 
   const hues = useMemo(
     () => ({
       signal: new THREE.Color(SIGNAL),
+      ink: new THREE.Color(INK),
       builder: new THREE.Color(CONSTELLATION_HEX.builder),
       mind: new THREE.Color(CONSTELLATION_HEX.mind),
       human: new THREE.Color(CONSTELLATION_HEX.human),
     }),
     [],
   );
+
+  // Node glows (constellation hue) + the faint radial core behind the
+  // Lattice — all additive sprites off one shared falloff texture.
+  const glowMaterials = useMemo(
+    () =>
+      GLYPHS.map(
+        (def) =>
+          new THREE.MeshBasicMaterial({
+            map: glowTexture,
+            color: CONSTELLATION_HEX[def.constellation],
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending,
+            depthTest: false,
+            depthWrite: false,
+            fog: false,
+            toneMapped: false,
+          }),
+      ),
+    [glowTexture],
+  );
+  const coreGlowMaterial = useMemo(
+    () =>
+      new THREE.MeshBasicMaterial({
+        map: glowTexture,
+        color: SIGNAL,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+        toneMapped: false,
+      }),
+    [glowTexture],
+  );
+
+  // Lattice edges as screen-space quads (two triangles each) — native GL
+  // lines can't vary width, and the prototype's depth shading needs
+  // per-edge width 0.8→1.6 as well as alpha 0.08→0.46.
+  const latticeEdges = useMemo(() => {
+    const geometry = new THREE.BufferGeometry();
+    const positions = new THREE.Float32BufferAttribute(MAX_LATTICE_EDGES * 4 * 3, 3);
+    const colors = new THREE.Float32BufferAttribute(MAX_LATTICE_EDGES * 4 * 3, 3);
+    positions.setUsage(THREE.DynamicDrawUsage);
+    colors.setUsage(THREE.DynamicDrawUsage);
+    const index: number[] = [];
+    for (let e = 0; e < MAX_LATTICE_EDGES; e++) {
+      const b = e * 4;
+      index.push(b, b + 1, b + 2, b + 2, b + 1, b + 3);
+    }
+    geometry.setAttribute("position", positions);
+    geometry.setAttribute("color", colors);
+    geometry.setIndex(index);
+    geometry.setDrawRange(0, 0);
+    const material = new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+      fog: false,
+      toneMapped: false,
+    });
+    return { geometry, positions, colors, material };
+  }, []);
 
   const synapse = useMemo(() => {
     const geometry = new THREE.BufferGeometry();
@@ -362,6 +502,15 @@ export function SignalField() {
     const speedMult = 1 + 1.5 * ignite;
     const disperse = 1 + 0.4 * ignite;
 
+    // Beat 3 phases, all carved out of the synthesis range: inter-cluster
+    // synapses fire, the field contracts and resolves into the Lattice
+    // (~one slow rotation across the beat), then it shrinks and docks.
+    const synthP = rangeProgress(beats.synthesis, p);
+    const morphP = THREE.MathUtils.smoothstep(synthP, 0.24, 0.66);
+    const latticeIn = THREE.MathUtils.smoothstep(synthP, 0.45, 0.75);
+    const labelIn = THREE.MathUtils.smoothstep(synthP, 0.62, 0.82);
+    const dockP = THREE.MathUtils.smoothstep(synthP, 0.8, 1);
+
     const w = state.size.width;
     const h = state.size.height;
     if (!w || !h) return;
@@ -372,11 +521,47 @@ export function SignalField() {
     const t = driftTime.current;
 
     // Parallax: lean away from the cursor. Damped (inertial) and capped by
-    // the small target amplitudes; screen +y is down, three +y is up.
-    group.position.x = THREE.MathUtils.damp(group.position.x, -pointer.x * 0.8, 2.2, delta);
-    group.position.y = THREE.MathUtils.damp(group.position.y, pointer.y * 0.55, 2.2, delta);
-    group.rotation.y = THREE.MathUtils.damp(group.rotation.y, -pointer.x * 0.05, 2.2, delta);
-    group.rotation.x = THREE.MathUtils.damp(group.rotation.x, pointer.y * 0.04, 2.2, delta);
+    // the small target amplitudes; screen +y is down, three +y is up. Backs
+    // almost fully off once the Lattice docks — a UI fixture shouldn't sway.
+    const lean = 1 - 0.85 * dockP;
+    group.position.x = THREE.MathUtils.damp(group.position.x, -pointer.x * 0.8 * lean, 2.2, delta);
+    group.position.y = THREE.MathUtils.damp(group.position.y, pointer.y * 0.55 * lean, 2.2, delta);
+    group.rotation.y = THREE.MathUtils.damp(group.rotation.y, -pointer.x * 0.05 * lean, 2.2, delta);
+    group.rotation.x = THREE.MathUtils.damp(group.rotation.x, pointer.y * 0.04 * lean, 2.2, delta);
+
+    // Project the Lattice (prototype math: manual yaw/pitch + perspective
+    // 1100, in CSS px). ry adds one eased full turn across the beat on top
+    // of the ambient t-rotation, so the boundary into beats 4–8 is seamless.
+    let latCX = 0;
+    let latCY = 0;
+    let latR = 0;
+    if (synthP > 0) {
+      dockTarget(w, h, dockScratch);
+      const rFull = Math.min(w * 0.26, h * 0.294, LATTICE_R_BASE);
+      latCX = THREE.MathUtils.lerp(w * 0.5, dockScratch.x, dockP);
+      latCY = THREE.MathUtils.lerp(h * 0.5, dockScratch.y, dockP);
+      latR = THREE.MathUtils.lerp(rFull, dockScratch.r, dockP);
+      const ry = t * 0.18 + THREE.MathUtils.smoothstep(synthP, 0, 1) * Math.PI * 2;
+      const rx = 0.34 + Math.sin(t * 0.07) * 0.06;
+      const cosY = Math.cos(ry);
+      const sinY = Math.sin(ry);
+      const cosX = Math.cos(rx);
+      const sinX = Math.sin(rx);
+      for (let i = 0; i < lattice.nodes.length; i++) {
+        const node = lattice.nodes[i];
+        const X = node.x * latR;
+        const Y = node.y * latR;
+        const Z = node.z * latR;
+        const x1 = X * cosY + Z * sinY;
+        const z1 = -X * sinY + Z * cosY;
+        const y1 = Y * cosX - z1 * sinX;
+        const z2 = Y * sinX + z1 * cosX;
+        const persp = LATTICE_PERSP / (LATTICE_PERSP + z2);
+        nodePX[i] = latCX + x1 * persp;
+        nodePY[i] = latCY + y1 * persp;
+        nodeDepth[i] = 1 - (z2 + latR) / (2 * latR);
+      }
+    }
 
     for (let i = 0; i < glyphs.length; i++) {
       const glyph = glyphs[i];
@@ -406,17 +591,24 @@ export function SignalField() {
         glyph.clusterY +
         Math.cos(t * glyph.floatFy + glyph.floatPhase) * CLUSTER_FLOAT_PX * gP;
 
-      const cx = THREE.MathUtils.lerp(hx, kx, gP);
-      const cy = THREE.MathUtils.lerp(hy, ky, gP);
+      // Beat 3: contract onto the Lattice node this glyph becomes.
+      const ni = nodeOfGlyph[i];
+      const depth = synthP > 0 ? nodeDepth[ni] : 0;
+      const cx = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(hx, kx, gP),
+        nodePX[ni],
+        morphP,
+      );
+      const cy = THREE.MathUtils.lerp(
+        THREE.MathUtils.lerp(hy, ky, gP),
+        nodePY[ni],
+        morphP,
+      );
       posX[i] = cx;
       posY[i] = cy;
 
       item.position.set((cx - w / 2) * s, (h / 2 - cy) * s, 0);
       item.scale.setScalar(s);
-
-      const poly = polyRefs.current[i];
-      // Negated: prototype rotation is in y-down screen space.
-      if (poly) poly.rotation.z = -(glyph.rot + t * glyph.rotV);
 
       // Dim near screen center so the hero type dominates — relaxes away as
       // the clusters form (the name is gone from the viewport by then).
@@ -424,13 +616,63 @@ export function SignalField() {
       const heroDim = 0.35 + 0.65 * THREE.MathUtils.smoothstep(centerDist, 0.12, 0.5);
       const dim = THREE.MathUtils.lerp(heroDim, 1, clusterBeatP);
       dims[i] = dim;
-      glyph.outlineMaterial.opacity = OUTLINE_OPACITY * dim;
-      glyph.spokeMaterial.opacity = SPOKE_OPACITY * dim;
-      glyph.dotMaterial.opacity = DOT_OPACITY * dim;
+
+      // Polygons dissolve as the field resolves into structure.
+      const polyFade = 1 - morphP;
+      const poly = polyRefs.current[i];
+      if (poly) {
+        poly.visible = polyFade > 0.004;
+        if (poly.visible) {
+          // Negated: prototype rotation is in y-down screen space.
+          poly.rotation.z = -(glyph.rot + t * glyph.rotV);
+          poly.scale.setScalar(1 - 0.55 * morphP);
+        }
+      }
+      glyph.outlineMaterial.opacity = OUTLINE_OPACITY * dim * polyFade;
+      glyph.spokeMaterial.opacity = SPOKE_OPACITY * dim * polyFade;
+
+      // The center dot IS the node: it grows, takes the constellation hue,
+      // and picks up the prototype's depth-shaded alpha (0.35→1, r 2.5→6).
+      const nodeRadius = 2.5 + depth * 3.5;
+      const dot = dotRefs.current[i];
+      if (dot) {
+        dot.scale.setScalar(THREE.MathUtils.lerp(1, nodeRadius / DOT_RADIUS, morphP));
+      }
+      glyph.dotMaterial.color.lerpColors(hues.ink, hues[glyph.group], morphP);
+      glyph.dotMaterial.opacity = THREE.MathUtils.lerp(
+        DOT_OPACITY * dim,
+        0.35 + depth * 0.65,
+        morphP,
+      );
+
+      // Node glow, depth-shaded (stands in for the prototype's shadowBlur
+      // until the bloom pass lands).
+      const glow = glowRefs.current[i];
+      if (glow) {
+        const glowAlpha = latticeIn * (0.12 + depth * 0.38);
+        glowMaterials[i].opacity = glowAlpha;
+        glow.visible = glowAlpha > 0.004;
+        if (glow.visible) glow.scale.setScalar(nodeRadius * 7);
+      }
+
+      // Labels: below the glyph until the morph, then front-facing nodes
+      // only (depth > 0.45), small mono to the right; off while docked.
+      // The position swap happens while the label is fully transparent.
       const label = labelRefs.current[i];
       if (label && glyph.labelW > 0) {
         label.scale.set(glyph.labelW, glyph.labelH, 1); // uniform px→world via parent
-        glyph.labelMaterial.opacity = LABEL_OPACITY * dim;
+        if (synthP < 0.55) {
+          label.position.set(0, -LABEL_CENTER_Y, 0);
+          glyph.labelMaterial.opacity =
+            LABEL_OPACITY * dim * (1 - Math.min(morphP * 2, 1));
+        } else {
+          label.position.set(nodeRadius + NODE_LABEL_GAP + glyph.labelW / 2, 0, 0);
+          glyph.labelMaterial.opacity =
+            (0.25 + depth * 0.55) *
+            labelIn *
+            (1 - dockP) *
+            THREE.MathUtils.smoothstep(depth, 0.45, 0.55);
+        }
       }
     }
 
@@ -473,8 +715,10 @@ export function SignalField() {
 
     // Beat 2: intra-constellation webs draw in, staggered pair by pair, in
     // the constellation's own hue. Length grows from one endpoint — lines
-    // literally draw themselves as the cluster settles.
-    if (clusterBeatP > 0.004) {
+    // literally draw themselves as the cluster settles. They dissolve again
+    // as the field morphs into the Lattice.
+    const webFade = 1 - morphP;
+    if (clusterBeatP > 0.004 && webFade > 0.004) {
       for (const [i, j, g, k] of CLUSTER_WEB) {
         const arrive = Math.min(clusterEase[i], clusterEase[j]);
         const growth = THREE.MathUtils.smoothstep(
@@ -488,6 +732,7 @@ export function SignalField() {
           Math.max(1 - d / SYNAPSE_DIST, 0.35) *
           SYNAPSE_OPACITY *
           growth *
+          webFade *
           ((dims[i] + dims[j]) / 2);
         writeSegment(
           posX[i],
@@ -500,16 +745,107 @@ export function SignalField() {
       }
     }
 
+    // Beat 3 phase 1: inter-cluster synapses fire — signal-hue lines draw
+    // between the clusters along what will become the Lattice's inter-group
+    // edges, then yield to the real edges as the Lattice resolves.
+    const interFade = 1 - latticeIn;
+    if (synthP > 0.004 && interFade > 0.004) {
+      for (let e = 0; e < lattice.interEdges.length; e++) {
+        const [na, nb] = lattice.interEdges[e];
+        const i = lattice.nodes[na].glyphIndex;
+        const j = lattice.nodes[nb].glyphIndex;
+        const growth = THREE.MathUtils.smoothstep(
+          synthP,
+          0.02 * e,
+          0.22 + 0.02 * e,
+        );
+        if (growth <= 0.004) continue;
+        const alpha = 0.16 * growth * interFade;
+        writeSegment(
+          posX[i],
+          posY[i],
+          THREE.MathUtils.lerp(posX[i], posX[j], growth),
+          THREE.MathUtils.lerp(posY[i], posY[j], growth),
+          hues.signal,
+          alpha,
+        );
+      }
+    }
+
     synapse.geometry.setDrawRange(0, seg * 2);
     pos.needsUpdate = true;
     col.needsUpdate = true;
+
+    // ── The Lattice: depth-shaded edge quads + core glow ─────────────────
+    let edgeCount = 0;
+    if (latticeIn > 0.004) {
+      const epos = latticeEdges.positions;
+      const ecol = latticeEdges.colors;
+      for (const [a, b] of lattice.edges) {
+        const ax = nodePX[a];
+        const ay = nodePY[a];
+        const bx = nodePX[b];
+        const by = nodePY[b];
+        const eDepth = (nodeDepth[a] + nodeDepth[b]) / 2;
+        const alpha = (0.08 + eDepth * 0.38) * latticeIn;
+        const halfWidth = (0.8 + eDepth * 0.8) / 2;
+        let dx = bx - ax;
+        let dy = by - ay;
+        const len = Math.hypot(dx, dy) || 1;
+        dx /= len;
+        dy /= len;
+        const ox = -dy * halfWidth;
+        const oy = dx * halfWidth;
+        const v = edgeCount * 4;
+        epos.setXYZ(v, (ax + ox - w / 2) * s, (h / 2 - (ay + oy)) * s, 0);
+        epos.setXYZ(v + 1, (ax - ox - w / 2) * s, (h / 2 - (ay - oy)) * s, 0);
+        epos.setXYZ(v + 2, (bx + ox - w / 2) * s, (h / 2 - (by + oy)) * s, 0);
+        epos.setXYZ(v + 3, (bx - ox - w / 2) * s, (h / 2 - (by - oy)) * s, 0);
+        for (let c = 0; c < 4; c++) {
+          ecol.setXYZ(
+            v + c,
+            hues.signal.r * alpha,
+            hues.signal.g * alpha,
+            hues.signal.b * alpha,
+          );
+        }
+        edgeCount++;
+      }
+      epos.needsUpdate = true;
+      ecol.needsUpdate = true;
+    }
+    latticeEdges.geometry.setDrawRange(0, edgeCount * 6);
+
+    const core = coreGlowRef.current;
+    if (core) {
+      const coreAlpha = 0.07 * latticeIn;
+      coreGlowMaterial.opacity = coreAlpha;
+      core.visible = coreAlpha > 0.004;
+      if (core.visible) {
+        core.position.set((latCX - w / 2) * s, (h / 2 - latCY) * s, 0);
+        core.scale.setScalar(latR * 2.8 * s);
+      }
+    }
   });
 
   return (
     <group ref={groupRef}>
+      <mesh
+        ref={coreGlowRef}
+        geometry={planeGeometry}
+        material={coreGlowMaterial}
+        renderOrder={0}
+        visible={false}
+      />
       <lineSegments
         geometry={synapse.geometry}
         material={synapse.material}
+        frustumCulled={false}
+        renderOrder={1}
+      />
+      <mesh
+        geometry={latticeEdges.geometry}
+        material={latticeEdges.material}
         frustumCulled={false}
         renderOrder={1}
       />
@@ -536,7 +872,23 @@ export function SignalField() {
               renderOrder={2}
             />
           </group>
-          <mesh geometry={dotGeometry} material={glyph.dotMaterial} renderOrder={3} />
+          <mesh
+            ref={(el) => {
+              glowRefs.current[i] = el;
+            }}
+            geometry={planeGeometry}
+            material={glowMaterials[i]}
+            renderOrder={2}
+            visible={false}
+          />
+          <mesh
+            ref={(el) => {
+              dotRefs.current[i] = el;
+            }}
+            geometry={dotGeometry}
+            material={glyph.dotMaterial}
+            renderOrder={3}
+          />
           <mesh
             ref={(el) => {
               labelRefs.current[i] = el;

@@ -8,6 +8,7 @@ import { Journey } from "@/components/home/Journey";
 import { Leadership } from "@/components/home/Leadership";
 import { Nav } from "@/components/home/Nav";
 import { Projects } from "@/components/home/Projects";
+import { Synthesis } from "@/components/home/Synthesis";
 
 export const metadata: Metadata = {
   title: "Ujjwal Kaushik — Full-stack & AI",
@@ -23,6 +24,7 @@ export default function Home() {
       <Nav />
       <Hero />
       <Constellation />
+      <Synthesis />
       <About />
       <Projects />
       <Journey />
