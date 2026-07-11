@@ -31,6 +31,14 @@ const LABEL_CENTER_Y = 40.5;
 const SYNAPSE_DIST = 250;
 const SYNAPSE_OPACITY = 0.22;
 
+/**
+ * Labels are canvas-texture sprites drawn with the real JetBrains Mono TTF,
+ * loaded explicitly via the FontFace API so metrics are deterministic — no
+ * fallback-font measurement window, no distortion. (drei/troika Text renders
+ * a broken fullscreen quad against three r185, so it's not an option here.)
+ */
+const LABEL_FONT_URL = "/fonts/JetBrainsMono-Regular.ttf";
+const LABEL_FONT_FAMILY = "GlyphFieldMono";
 /** Supersample factor for the label textures so they stay crisp at dpr 2. */
 const LABEL_SCALE = 4;
 
@@ -47,7 +55,7 @@ interface GlyphInstance {
   labelMaterial: THREE.MeshBasicMaterial;
   labelTexture: THREE.CanvasTexture;
   labelCanvas: HTMLCanvasElement;
-  /** Label plane size in CSS px, updated whenever the texture is redrawn. */
+  /** Label plane size in CSS px; 0 until the font has loaded and drawn. */
   labelW: number;
   labelH: number;
   // Prototype placement/drift params: base position as viewport fractions,
@@ -139,7 +147,7 @@ function buildGlyphs(): GlyphInstance[] {
       labelMaterial: new THREE.MeshBasicMaterial({
         map: labelTexture,
         transparent: true,
-        opacity: LABEL_OPACITY,
+        opacity: 0, // stays invisible until the TTF has loaded and drawn
         depthTest: false,
         depthWrite: false,
         fog: false,
@@ -147,8 +155,8 @@ function buildGlyphs(): GlyphInstance[] {
       }),
       labelTexture,
       labelCanvas,
-      labelW: 1,
-      labelH: 1,
+      labelW: 0,
+      labelH: 0,
       bx: 0.14 + col * 0.24 + r() * 0.1,
       by: 0.18 + row * 0.3 + r() * 0.12,
       ax: 20 + r() * 26,
@@ -163,19 +171,16 @@ function buildGlyphs(): GlyphInstance[] {
   });
 }
 
-/** The site's mono stack (next/font JetBrains Mono), for canvas fillText. */
-function monoFamily(): string {
-  const family = getComputedStyle(document.body)
-    .getPropertyValue("--font-mono-src")
-    .trim();
-  return family || "monospace";
-}
-
-function drawLabel(glyph: GlyphInstance, family: string) {
+/**
+ * Renders one label into its canvas at LABEL_SCALE× and records the plane
+ * size in CSS px. Only called once the TTF is resident (or its load failed),
+ * so measureText always uses the metrics of the face actually drawn.
+ */
+function drawLabel(glyph: GlyphInstance) {
   const ctx = glyph.labelCanvas.getContext("2d");
   if (!ctx) return;
   const k = LABEL_SCALE;
-  const font = `${LABEL_FONT_PX * k}px ${family}`;
+  const font = `${LABEL_FONT_PX * k}px "${LABEL_FONT_FAMILY}", monospace`;
   ctx.font = font;
   const w = Math.max(Math.ceil(ctx.measureText(glyph.text).width) + 2 * k, 2);
   const h = (LABEL_FONT_PX + 4) * k;
@@ -237,18 +242,22 @@ export function GlyphField() {
     return { geometry, positions, colors, material, hue: new THREE.Color(SIGNAL) };
   }, []);
 
-  // Labels draw immediately (mono is on screen well before this lazy chunk
-  // loads) and once more after the font face set settles, just in case.
+  // Load the TTF, then draw every label with its real metrics. On failure
+  // (offline dev?) draw anyway — monospace fallback beats missing labels.
   useEffect(() => {
     let cancelled = false;
-    const apply = () => {
-      const family = monoFamily();
-      for (const glyph of glyphs) drawLabel(glyph, family);
+    const drawAll = () => {
+      if (cancelled) return;
+      for (const glyph of glyphs) drawLabel(glyph);
     };
-    apply();
-    document.fonts.ready.then(() => {
-      if (!cancelled) apply();
-    });
+    const face = new FontFace(LABEL_FONT_FAMILY, `url(${LABEL_FONT_URL})`);
+    face
+      .load()
+      .then((loaded) => {
+        document.fonts.add(loaded);
+        drawAll();
+      })
+      .catch(drawAll);
     return () => {
       cancelled = true;
     };
@@ -309,9 +318,6 @@ export function GlyphField() {
       // Negated: prototype rotation is in y-down screen space.
       if (poly) poly.rotation.z = -(glyph.rot + t * glyph.rotV);
 
-      const label = labelRefs.current[i];
-      if (label) label.scale.set(glyph.labelW, glyph.labelH, 1);
-
       // Dim near screen center so the hero type always dominates.
       const centerDist = Math.hypot((cx / w) * 2 - 1, (cy / h) * 2 - 1);
       const dim = 0.35 + 0.65 * THREE.MathUtils.smoothstep(centerDist, 0.12, 0.5);
@@ -320,7 +326,11 @@ export function GlyphField() {
       glyph.outlineMaterial.opacity = OUTLINE_OPACITY * fade;
       glyph.spokeMaterial.opacity = SPOKE_OPACITY * fade;
       glyph.dotMaterial.opacity = DOT_OPACITY * fade;
-      glyph.labelMaterial.opacity = LABEL_OPACITY * fade;
+      const label = labelRefs.current[i];
+      if (label && glyph.labelW > 0) {
+        label.scale.set(glyph.labelW, glyph.labelH, 1); // uniform px→world via parent
+        glyph.labelMaterial.opacity = LABEL_OPACITY * fade;
+      }
     }
 
     // Synapses: a line between every pair closer than 250px, alpha fading
