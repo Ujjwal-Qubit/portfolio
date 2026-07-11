@@ -1,6 +1,7 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
+import { Select } from "@react-three/postprocessing";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { rangeProgress } from "@/lib/canvas/beats";
@@ -1010,53 +1011,58 @@ export function SignalField() {
 
   return (
     <group ref={groupRef}>
-      <mesh
-        ref={coreGlowRef}
-        geometry={planeGeometry}
-        material={coreGlowMaterial}
-        renderOrder={0}
-        visible={false}
-      />
-      <lineSegments
-        geometry={synapse.geometry}
-        material={synapse.material}
-        frustumCulled={false}
-        renderOrder={1}
-      />
-      <mesh
-        geometry={latticeEdges.geometry}
-        material={latticeEdges.material}
-        frustumCulled={false}
-        renderOrder={1}
-      />
-      <mesh
-        ref={pointGlowRef}
-        geometry={planeGeometry}
-        material={pointMaterials.glow}
-        renderOrder={0}
-        visible={false}
-      />
-      <lineLoop
-        ref={pointRingRef}
-        geometry={ringGeometry}
-        material={pointMaterials.ring}
-        renderOrder={2}
-        visible={false}
-      />
-      <mesh
-        ref={pointHaloRef}
-        geometry={planeGeometry}
-        material={pointMaterials.halo}
-        renderOrder={2}
-        visible={false}
-      />
-      <mesh
-        ref={pointCoreRef}
-        geometry={circleGeometry}
-        material={pointMaterials.core}
-        renderOrder={3}
-        visible={false}
-      />
+      {/* Everything luminous — synapses, Lattice edges, the point — is
+          <Select>ed for the (optional) selective bloom pass. Glyph outlines,
+          spokes, and labels stay clean. */}
+      <Select enabled>
+        <mesh
+          ref={coreGlowRef}
+          geometry={planeGeometry}
+          material={coreGlowMaterial}
+          renderOrder={0}
+          visible={false}
+        />
+        <lineSegments
+          geometry={synapse.geometry}
+          material={synapse.material}
+          frustumCulled={false}
+          renderOrder={1}
+        />
+        <mesh
+          geometry={latticeEdges.geometry}
+          material={latticeEdges.material}
+          frustumCulled={false}
+          renderOrder={1}
+        />
+        <mesh
+          ref={pointGlowRef}
+          geometry={planeGeometry}
+          material={pointMaterials.glow}
+          renderOrder={0}
+          visible={false}
+        />
+        <lineLoop
+          ref={pointRingRef}
+          geometry={ringGeometry}
+          material={pointMaterials.ring}
+          renderOrder={2}
+          visible={false}
+        />
+        <mesh
+          ref={pointHaloRef}
+          geometry={planeGeometry}
+          material={pointMaterials.halo}
+          renderOrder={2}
+          visible={false}
+        />
+        <mesh
+          ref={pointCoreRef}
+          geometry={circleGeometry}
+          material={pointMaterials.core}
+          renderOrder={3}
+          visible={false}
+        />
+      </Select>
       {glyphs.map((glyph, i) => (
         <group
           key={glyph.id}
@@ -1080,23 +1086,25 @@ export function SignalField() {
               renderOrder={2}
             />
           </group>
-          <mesh
-            ref={(el) => {
-              glowRefs.current[i] = el;
-            }}
-            geometry={planeGeometry}
-            material={glowMaterials[i]}
-            renderOrder={2}
-            visible={false}
-          />
-          <mesh
-            ref={(el) => {
-              dotRefs.current[i] = el;
-            }}
-            geometry={dotGeometry}
-            material={glyph.dotMaterial}
-            renderOrder={3}
-          />
+          <Select enabled>
+            <mesh
+              ref={(el) => {
+                glowRefs.current[i] = el;
+              }}
+              geometry={planeGeometry}
+              material={glowMaterials[i]}
+              renderOrder={2}
+              visible={false}
+            />
+            <mesh
+              ref={(el) => {
+                dotRefs.current[i] = el;
+              }}
+              geometry={dotGeometry}
+              material={glyph.dotMaterial}
+              renderOrder={3}
+            />
+          </Select>
           <mesh
             ref={(el) => {
               labelRefs.current[i] = el;

@@ -1,6 +1,7 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
+import { EffectComposer, Selection, SelectiveBloom } from "@react-three/postprocessing";
 import { useEffect, useState } from "react";
 import { beatAt } from "@/lib/canvas/beats";
 import { useCanvasStore } from "@/lib/canvas/store";
@@ -9,6 +10,12 @@ import { SignalField } from "./SignalField";
 import { useScrollDriver } from "./useScrollDriver";
 
 const VOID = "#07070d";
+
+/**
+ * Bloom is additive polish, not structure: NEXT_PUBLIC_BLOOM=off skips the
+ * composer entirely and the choreography must read identically without it.
+ */
+const BLOOM_ENABLED = process.env.NEXT_PUBLIC_BLOOM !== "off";
 
 // Dev-only: expose the canvas store so verification tooling can read the
 // calibrated beat ranges. Compiled out of production bundles.
@@ -83,10 +90,29 @@ export default function SceneRoot() {
         camera={{ position: [0, 0, 10], fov: 50 }}
         onCreated={() => setReady(true)}
       >
+        {/* Solid void background — identical to the page behind it, and it
+            keeps the bloom composer's output well-defined (no alpha pass). */}
+        <color attach="background" args={[VOID]} />
         {/* Fog toward void so depth reads without the scene ever going flat black. */}
         <fog attach="fog" args={[VOID, 10, 26]} />
-        <SignalField />
-        <Dust />
+        <Selection>
+          <SignalField />
+          <Dust />
+          {BLOOM_ENABLED && (
+            <EffectComposer multisampling={0}>
+              {/* Tuned luminous-not-glowy: only what SignalField marks with
+                  <Select> blooms — synapses, Lattice edges/nodes, the point. */}
+              <SelectiveBloom
+                lights={[]}
+                luminanceThreshold={0}
+                luminanceSmoothing={0.2}
+                intensity={0.8}
+                radius={0.6}
+                mipmapBlur
+              />
+            </EffectComposer>
+          )}
+        </Selection>
         <DevSnapshot />
       </Canvas>
     </div>
