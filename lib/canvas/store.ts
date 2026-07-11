@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import type { BeatName } from "./beats";
+import { BEATS } from "./beats";
+import type { BeatName, BeatRanges } from "./beats";
 
 /**
  * Bridge between the DOM world (Lenis/ScrollTrigger/pointer handlers write)
@@ -13,6 +14,11 @@ interface CanvasState {
   /** 0..1 across the whole page scroll. */
   scrollProgress: number;
   activeBeat: BeatName;
+  /**
+   * Beat ranges calibrated against the real section offsets (written by
+   * useScrollDriver on mount/refresh). Defaults to the static estimates.
+   */
+  beats: BeatRanges;
   /** Normalized pointer, -1..1 each axis (screen coords: +y is down). */
   pointer: { x: number; y: number };
 }
@@ -20,5 +26,6 @@ interface CanvasState {
 export const useCanvasStore = create<CanvasState>(() => ({
   scrollProgress: 0,
   activeBeat: "void",
+  beats: BEATS,
   pointer: { x: 0, y: 0 },
 }));

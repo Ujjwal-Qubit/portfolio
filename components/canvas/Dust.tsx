@@ -3,12 +3,13 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { BEATS } from "@/lib/canvas/beats";
 import { mulberry32 } from "@/lib/canvas/random";
 import { useCanvasStore } from "@/lib/canvas/store";
 
 const COUNT = 240;
 const BASE_OPACITY = 0.22;
+/** After ignition the dust settles here and stays — ambient deep background. */
+const SETTLED_OPACITY = 0.09;
 
 /**
  * Sparse ambient particle dust for depth behind the glyph field — one Points
@@ -46,12 +47,11 @@ export function Dust() {
   useFrame((_, delta) => {
     const points = pointsRef.current;
     if (!points) return;
-    // Fade out with the glyph field over the ignition beat, scrubbed.
-    const p = useCanvasStore.getState().scrollProgress;
-    const fieldOpacity =
-      1 - THREE.MathUtils.smoothstep(p, BEATS.ignition.start, BEATS.ignition.end);
-    material.opacity = BASE_OPACITY * fieldOpacity;
-    points.visible = fieldOpacity > 0.004;
+    // Settle to a faint ambient level over the ignition beat, scrubbed —
+    // the dust persists through every later beat as deep background.
+    const { scrollProgress: p, beats } = useCanvasStore.getState();
+    const settle = THREE.MathUtils.smoothstep(p, beats.ignition.start, beats.ignition.end);
+    material.opacity = THREE.MathUtils.lerp(BASE_OPACITY, SETTLED_OPACITY, settle);
     points.rotation.y += delta * 0.004; // barely-there churn
   });
 

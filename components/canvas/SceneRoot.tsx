@@ -3,7 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useState } from "react";
 import { Dust } from "./Dust";
-import { GlyphField } from "./GlyphField";
+import { SignalField } from "./SignalField";
 import { useScrollDriver } from "./useScrollDriver";
 
 const VOID = "#07070d";
@@ -43,7 +43,7 @@ export default function SceneRoot() {
       >
         {/* Fog toward void so depth reads without the scene ever going flat black. */}
         <fog attach="fog" args={[VOID, 10, 26]} />
-        <GlyphField />
+        <SignalField />
         <Dust />
       </Canvas>
     </div>
