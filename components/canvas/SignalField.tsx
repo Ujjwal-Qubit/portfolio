@@ -49,6 +49,11 @@ const LATTICE_R_BASE = 265;
 const NODE_LABEL_GAP = 8;
 const MAX_LATTICE_EDGES = 36;
 
+// Beat 9 — the contact point (prototype drawPoint numbers).
+const POINT_GLOW_RADIUS = 190;
+const POINT_RING_MAX = 190;
+const POINT_CORE_RADIUS = 4.5;
+
 /**
  * Labels are canvas-texture sprites drawn with the real JetBrains Mono TTF,
  * loaded explicitly via the FontFace API so metrics are deterministic — no
@@ -263,6 +268,31 @@ function clusterAnchor(group: number, w: number, h: number, out: number[]) {
   out[1] = h * (group === 1 ? 0.56 : 0.62);
 }
 
+/**
+ * The contact point's radial falloff, with the prototype's exact gradient
+ * stops (0.28 → 0.08 at 40% → 0, normalized to white and tinted/scaled by
+ * the material).
+ */
+function makePointGlowTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.4, "rgba(255,255,255,0.286)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
 /** Soft radial falloff, shared by node glows and the core glow. */
 function makeGlowTexture(): THREE.CanvasTexture {
   const canvas = document.createElement("canvas");
@@ -339,6 +369,12 @@ export function SignalField() {
   const dotRefs = useRef<(THREE.Mesh | null)[]>([]);
   const glowRefs = useRef<(THREE.Mesh | null)[]>([]);
   const coreGlowRef = useRef<THREE.Mesh>(null);
+  const pointGlowRef = useRef<THREE.Mesh>(null);
+  const pointRingRef = useRef<THREE.LineLoop>(null);
+  const pointHaloRef = useRef<THREE.Mesh>(null);
+  const pointCoreRef = useRef<THREE.Mesh>(null);
+  /** The DOM contact glow the collapse lands on (queried lazily). */
+  const contactGlowEl = useRef<HTMLElement | null>(null);
   const driftTime = useRef(0);
 
   /** glyph index → its lattice node index. */
@@ -364,7 +400,19 @@ export function SignalField() {
 
   const dotGeometry = useMemo(() => new THREE.CircleGeometry(DOT_RADIUS, 16), []);
   const planeGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+  const circleGeometry = useMemo(() => new THREE.CircleGeometry(1, 32), []);
+  const ringGeometry = useMemo(() => {
+    const pts: number[] = [];
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * Math.PI * 2;
+      pts.push(Math.cos(a), Math.sin(a), 0);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    return geometry;
+  }, []);
   const glowTexture = useMemo(makeGlowTexture, []);
+  const pointGlowTexture = useMemo(makePointGlowTexture, []);
 
   const hues = useMemo(
     () => ({
@@ -412,6 +460,46 @@ export function SignalField() {
       }),
     [glowTexture],
   );
+
+  // Beat 9: the collapsed point — prototype drawPoint as four cheap parts:
+  // wide radial glow (exact gradient stops), one expanding ring, a strong
+  // small halo standing in for shadowBlur 24, and the ink-white core.
+  const pointMaterials = useMemo(() => {
+    const sprite = (map: THREE.Texture, color: string) =>
+      new THREE.MeshBasicMaterial({
+        map,
+        color,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+        toneMapped: false,
+      });
+    return {
+      glow: sprite(pointGlowTexture, SIGNAL),
+      halo: sprite(glowTexture, SIGNAL),
+      ring: new THREE.LineBasicMaterial({
+        color: SIGNAL,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+        toneMapped: false,
+      }),
+      core: new THREE.MeshBasicMaterial({
+        color: INK,
+        transparent: true,
+        opacity: 0,
+        depthTest: false,
+        depthWrite: false,
+        fog: false,
+        toneMapped: false,
+      }),
+    };
+  }, [glowTexture, pointGlowTexture]);
 
   // Lattice edges as screen-space quads (two triangles each) — native GL
   // lines can't vary width, and the prototype's depth shading needs
@@ -510,9 +598,22 @@ export function SignalField() {
     const latticeIn = THREE.MathUtils.smoothstep(synthP, 0.45, 0.75);
     const labelIn = THREE.MathUtils.smoothstep(synthP, 0.62, 0.82);
     const dockP = THREE.MathUtils.smoothstep(synthP, 0.8, 1);
+
+    // Beat 9, carved out of the collapse range: the Lattice leaves the dock
+    // and returns to center (undock), nodes ease inward as edges retract
+    // (inward), the point ignites (pointIn), and finally the canvas light
+    // hands off INTO the DOM contact glow (handoff) — one light, not two.
+    const collapseP = rangeProgress(beats.collapse, p);
+    const undock = THREE.MathUtils.smoothstep(collapseP, 0, 0.4);
+    const inward = THREE.MathUtils.smoothstep(collapseP, 0.35, 0.85);
+    const pointIn = THREE.MathUtils.smoothstep(collapseP, 0.55, 0.85);
+    const handoff = THREE.MathUtils.smoothstep(collapseP, 0.9, 1);
+    const collapseFade = 1 - THREE.MathUtils.smoothstep(collapseP, 0.5, 0.85);
+
     // Beats 4–8: while docked the Lattice recedes — content owns the page,
-    // the canvas is furniture.
-    const latticeDim = 1 - 0.25 * dockP;
+    // the canvas is furniture. During the collapse it fades out entirely as
+    // the nodes condense into the point.
+    const latticeDim = (1 - 0.25 * dockP) * collapseFade;
 
     const w = state.size.width;
     const h = state.size.height;
@@ -525,8 +626,10 @@ export function SignalField() {
 
     // Parallax: lean away from the cursor. Damped (inertial) and capped by
     // the small target amplitudes; screen +y is down, three +y is up. Backs
-    // almost fully off once the Lattice docks — a UI fixture shouldn't sway.
-    const lean = 1 - 0.85 * dockP;
+    // almost fully off once the Lattice docks — a UI fixture shouldn't sway
+    // — and dies completely during the collapse so the point stays glued to
+    // the DOM contact glow.
+    const lean = (1 - 0.85 * dockP) * (1 - collapseP);
     group.position.x = THREE.MathUtils.damp(group.position.x, -pointer.x * 0.8 * lean, 2.2, delta);
     group.position.y = THREE.MathUtils.damp(group.position.y, pointer.y * 0.55 * lean, 2.2, delta);
     group.rotation.y = THREE.MathUtils.damp(group.rotation.y, -pointer.x * 0.05 * lean, 2.2, delta);
@@ -535,6 +638,22 @@ export function SignalField() {
     // Project the Lattice (prototype math: manual yaw/pitch + perspective
     // 1100, in CSS px). ry adds one eased full turn across the beat on top
     // of the ambient t-rotation, so the boundary into beats 4–8 is seamless.
+    // The collapse target: the DOM contact glow's live viewport position
+    // (fallback: the prototype's cx, 0.36h).
+    let glowX = w * 0.5;
+    let glowY = h * 0.36;
+    if (collapseP > 0) {
+      if (!contactGlowEl.current) {
+        contactGlowEl.current = document.getElementById("contact-glow");
+      }
+      const el = contactGlowEl.current;
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        glowX = rect.left + rect.width / 2;
+        glowY = rect.top + rect.height / 2;
+      }
+    }
+
     let latCX = 0;
     let latCY = 0;
     let latR = 0;
@@ -544,7 +663,18 @@ export function SignalField() {
       latCX = THREE.MathUtils.lerp(w * 0.5, dockScratch.x, dockP);
       latCY = THREE.MathUtils.lerp(h * 0.5, dockScratch.y, dockP);
       latR = THREE.MathUtils.lerp(rFull, dockScratch.r, dockP);
-      const ry = t * 0.18 + THREE.MathUtils.smoothstep(synthP, 0, 1) * Math.PI * 2;
+      if (collapseP > 0) {
+        // Leave the dock toward the glow, breathe up briefly, then collapse.
+        latCX = THREE.MathUtils.lerp(latCX, glowX, undock);
+        latCY = THREE.MathUtils.lerp(latCY, glowY, undock);
+        const rMid = Math.min(140, rFull * 0.55);
+        latR = THREE.MathUtils.lerp(latR, rMid, undock) * (1 - inward);
+      }
+      // The collapse adds a gentle inward spiral on top of the ambient yaw.
+      const ry =
+        t * 0.18 +
+        THREE.MathUtils.smoothstep(synthP, 0, 1) * Math.PI * 2 +
+        THREE.MathUtils.smoothstep(collapseP, 0.25, 0.85) * 1.6;
       const rx = 0.34 + Math.sin(t * 0.07) * 0.06;
       const cosY = Math.cos(ry);
       const sinY = Math.sin(ry);
@@ -562,7 +692,8 @@ export function SignalField() {
         const persp = LATTICE_PERSP / (LATTICE_PERSP + z2);
         nodePX[i] = latCX + x1 * persp;
         nodePY[i] = latCY + y1 * persp;
-        nodeDepth[i] = 1 - (z2 + latR) / (2 * latR);
+        // Guarded: as the collapse drives R → 0 the depth ratio degenerates.
+        nodeDepth[i] = latR > 1 ? 1 - (z2 + latR) / (2 * latR) : 0.5;
       }
     }
 
@@ -829,6 +960,52 @@ export function SignalField() {
         core.scale.setScalar(latR * 2.8 * s);
       }
     }
+
+    // ── Beat 9: the point (prototype drawPoint, scrubbed) ────────────────
+    // Ignites as the Lattice condenses, then fades INTO the DOM contact
+    // glow at the very end of the scroll — reversing cleanly on the way up.
+    const pointAlpha = pointIn * (1 - handoff);
+    const pointVisible = pointAlpha > 0.004;
+    const px = (glowX - w / 2) * s;
+    const py = (h / 2 - glowY) * s;
+    const pulse = 1 + Math.sin(t * 1.1) * 0.07;
+    const pGlow = pointGlowRef.current;
+    if (pGlow) {
+      pointMaterials.glow.opacity = 0.28 * pointAlpha;
+      pGlow.visible = pointVisible;
+      if (pointVisible) {
+        pGlow.position.set(px, py, 0);
+        pGlow.scale.setScalar(POINT_GLOW_RADIUS * 2 * pulse * s);
+      }
+    }
+    const pRing = pointRingRef.current;
+    if (pRing) {
+      const rr = (t * 26) % POINT_RING_MAX;
+      pointMaterials.ring.opacity = 0.22 * (1 - rr / POINT_RING_MAX) * pointAlpha;
+      pRing.visible = pointVisible;
+      if (pointVisible) {
+        pRing.position.set(px, py, 0);
+        pRing.scale.setScalar((14 + rr) * s);
+      }
+    }
+    const pHalo = pointHaloRef.current;
+    if (pHalo) {
+      pointMaterials.halo.opacity = 0.55 * pointAlpha;
+      pHalo.visible = pointVisible;
+      if (pointVisible) {
+        pHalo.position.set(px, py, 0);
+        pHalo.scale.setScalar(56 * pulse * s);
+      }
+    }
+    const pCore = pointCoreRef.current;
+    if (pCore) {
+      pointMaterials.core.opacity = pointAlpha;
+      pCore.visible = pointVisible;
+      if (pointVisible) {
+        pCore.position.set(px, py, 0);
+        pCore.scale.setScalar(POINT_CORE_RADIUS * pulse * s);
+      }
+    }
   });
 
   return (
@@ -851,6 +1028,34 @@ export function SignalField() {
         material={latticeEdges.material}
         frustumCulled={false}
         renderOrder={1}
+      />
+      <mesh
+        ref={pointGlowRef}
+        geometry={planeGeometry}
+        material={pointMaterials.glow}
+        renderOrder={0}
+        visible={false}
+      />
+      <lineLoop
+        ref={pointRingRef}
+        geometry={ringGeometry}
+        material={pointMaterials.ring}
+        renderOrder={2}
+        visible={false}
+      />
+      <mesh
+        ref={pointHaloRef}
+        geometry={planeGeometry}
+        material={pointMaterials.halo}
+        renderOrder={2}
+        visible={false}
+      />
+      <mesh
+        ref={pointCoreRef}
+        geometry={circleGeometry}
+        material={pointMaterials.core}
+        renderOrder={3}
+        visible={false}
       />
       {glyphs.map((glyph, i) => (
         <group

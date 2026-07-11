@@ -15,6 +15,7 @@ export function Contact() {
       <div className="mx-auto flex min-h-[80vh] w-full max-w-6xl flex-col items-center justify-center gap-10 px-6 py-24 text-center">
         <Reveal className="flex flex-col items-center gap-10">
           <span
+            id="contact-glow"
             className="pulse-slow h-2.5 w-2.5 rounded-full bg-signal shadow-[0_0_28px_10px_rgba(139,124,255,0.35)]"
             aria-hidden
           />

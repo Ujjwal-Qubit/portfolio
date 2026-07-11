@@ -10,6 +10,12 @@ import { useScrollDriver } from "./useScrollDriver";
 
 const VOID = "#07070d";
 
+// Dev-only: expose the canvas store so verification tooling can read the
+// calibrated beat ranges. Compiled out of production bundles.
+if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__canvasStore = useCanvasStore;
+}
+
 /**
  * Dev-only verification hook: `window.__snapCanvas(progress?)` injects a
  * scroll progress, advances the render loop manually (works even while the
