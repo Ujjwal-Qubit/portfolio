@@ -50,9 +50,11 @@ function calibrateBeats(): BeatRanges | null {
   // otherwise the beat would compress into a few hundred px of scroll.
   const synthAnchor = synthesis !== null ? synthesis : about;
   const synthStart = P(synthAnchor - vh * 0.15);
-  // Docked by the time About's top is a third of a viewport from the top.
-  // (Clamped: without the synthesis section the beat is empty, never inverted.)
-  const synthEnd = Math.max(P(about - vh * 0.35), synthStart);
+  // Docked strictly before About's top ever reaches the viewport — not just
+  // "mostly there" — so no About content is visible for any synthesis
+  // scroll position. (Clamped: without the synthesis section the beat is
+  // empty, never inverted.)
+  const synthEnd = Math.max(P(about - vh), synthStart);
   const collapseStart = enter(contact);
 
   return {
