@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useThree } from "@react-three/fiber";
-import { EffectComposer, Selection, SelectiveBloom } from "@react-three/postprocessing";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { useEffect, useState } from "react";
 import { beatAt } from "@/lib/canvas/beats";
 import { useCanvasStore } from "@/lib/canvas/store";
@@ -95,24 +95,28 @@ export default function SceneRoot() {
         <color attach="background" args={[VOID]} />
         {/* Fog toward void so depth reads without the scene ever going flat black. */}
         <fog attach="fog" args={[VOID, 10, 26]} />
-        <Selection>
-          <SignalField />
-          <Dust />
-          {BLOOM_ENABLED && (
-            <EffectComposer multisampling={0}>
-              {/* Tuned luminous-not-glowy: only what SignalField marks with
-                  <Select> blooms — synapses, Lattice edges/nodes, the point. */}
-              <SelectiveBloom
-                lights={[]}
-                luminanceThreshold={0}
-                luminanceSmoothing={0.2}
-                intensity={0.8}
-                radius={0.6}
-                mipmapBlur
-              />
-            </EffectComposer>
-          )}
-        </Selection>
+        <SignalField />
+        <Dust />
+        {BLOOM_ENABLED && (
+          <EffectComposer multisampling={0}>
+            {/* Tuned luminous-not-glowy: the threshold sits above the
+                brightest non-bloom element (glyph labels, ~0.32 luminance)
+                and below the bloom-eligible elements, which SignalField
+                boosts (BLOOM_BOOST) well past it — synapses, Lattice
+                edges/nodes, the core glow, and the point. Glyph outlines,
+                spokes, labels, and dust all render under threshold and stay
+                clean. See components/canvas/SignalField.tsx for why this
+                replaced <Select>/<SelectiveBloom> (infinite selection-context
+                re-render loop). */}
+            <Bloom
+              luminanceThreshold={0.45}
+              luminanceSmoothing={0.2}
+              intensity={0.9}
+              radius={0.6}
+              mipmapBlur
+            />
+          </EffectComposer>
+        )}
         <DevSnapshot />
       </Canvas>
     </div>

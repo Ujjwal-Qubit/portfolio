@@ -1,7 +1,6 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { Select } from "@react-three/postprocessing";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { rangeProgress } from "@/lib/canvas/beats";
@@ -54,6 +53,23 @@ const MAX_LATTICE_EDGES = 36;
 const POINT_GLOW_RADIUS = 190;
 const POINT_RING_MAX = 190;
 const POINT_CORE_RADIUS = 4.5;
+
+/**
+ * Global <Bloom> (see SceneRoot) reads scene luminance, not a selection —
+ * there's no way to mark "this mesh blooms" directly. Instead, additive
+ * elements that should bloom (synapses, Lattice edges, node/core glow, the
+ * point) get their color pushed past the composer's luminanceThreshold via
+ * this multiplier; non-additive elements (glyph outlines/spokes/labels,
+ * dust) are left at their natural — sub-threshold — brightness. The core
+ * glow is deliberately meant to stay a faint wash (design ref: "signal at
+ * 0.06"), so it gets its own gentler boost.
+ */
+const BLOOM_BOOST = 4;
+const CORE_GLOW_BOOST = 2.4;
+
+function boostedColor(hex: string, boost: number): THREE.Color {
+  return new THREE.Color(hex).multiplyScalar(boost);
+}
 
 /**
  * Labels are canvas-texture sprites drawn with the real JetBrains Mono TTF,
@@ -432,14 +448,15 @@ export function SignalField() {
   );
 
   // Node glows (constellation hue) + the faint radial core behind the
-  // Lattice — all additive sprites off one shared falloff texture.
+  // Lattice — all additive sprites off one shared falloff texture, boosted
+  // so they clear the bloom threshold (see BLOOM_BOOST).
   const glowMaterials = useMemo(
     () =>
       GLYPHS.map(
         (def) =>
           new THREE.MeshBasicMaterial({
             map: glowTexture,
-            color: CONSTELLATION_HEX[def.constellation],
+            color: boostedColor(CONSTELLATION_HEX[def.constellation], BLOOM_BOOST),
             transparent: true,
             opacity: 0,
             blending: THREE.AdditiveBlending,
@@ -455,7 +472,7 @@ export function SignalField() {
     () =>
       new THREE.MeshBasicMaterial({
         map: glowTexture,
-        color: SIGNAL,
+        color: boostedColor(SIGNAL, CORE_GLOW_BOOST),
         transparent: true,
         opacity: 0,
         blending: THREE.AdditiveBlending,
@@ -469,9 +486,12 @@ export function SignalField() {
 
   // Beat 9: the collapsed point — prototype drawPoint as four cheap parts:
   // wide radial glow (exact gradient stops), one expanding ring, a strong
-  // small halo standing in for shadowBlur 24, and the ink-white core.
+  // small halo standing in for shadowBlur 24, and the ink-white core. Glow/
+  // halo/ring are additive and boosted to clear the bloom threshold; the
+  // core is a plain bright fill that already clears it unboosted (opacity
+  // reaches 1 at full ink-white).
   const pointMaterials = useMemo(() => {
-    const sprite = (map: THREE.Texture, color: string) =>
+    const sprite = (map: THREE.Texture, color: THREE.Color) =>
       new THREE.MeshBasicMaterial({
         map,
         color,
@@ -484,12 +504,13 @@ export function SignalField() {
         toneMapped: false,
       });
     return {
-      glow: sprite(pointGlowTexture, SIGNAL),
-      halo: sprite(glowTexture, SIGNAL),
+      glow: sprite(pointGlowTexture, boostedColor(SIGNAL, BLOOM_BOOST)),
+      halo: sprite(glowTexture, boostedColor(SIGNAL, BLOOM_BOOST)),
       ring: new THREE.LineBasicMaterial({
-        color: SIGNAL,
+        color: boostedColor(SIGNAL, BLOOM_BOOST),
         transparent: true,
         opacity: 0,
+        blending: THREE.AdditiveBlending,
         depthTest: false,
         depthWrite: false,
         fog: false,
@@ -829,10 +850,11 @@ export function SignalField() {
       alpha: number,
     ) => {
       const v = seg * 2;
+      const boosted = alpha * BLOOM_BOOST;
       pos.setXYZ(v, (x1 - w / 2) * s, (h / 2 - y1) * s, 0);
       pos.setXYZ(v + 1, (x2 - w / 2) * s, (h / 2 - y2) * s, 0);
-      col.setXYZ(v, hue.r * alpha, hue.g * alpha, hue.b * alpha);
-      col.setXYZ(v + 1, hue.r * alpha, hue.g * alpha, hue.b * alpha);
+      col.setXYZ(v, hue.r * boosted, hue.g * boosted, hue.b * boosted);
+      col.setXYZ(v + 1, hue.r * boosted, hue.g * boosted, hue.b * boosted);
       seg++;
     };
 
@@ -927,7 +949,7 @@ export function SignalField() {
         const bx = nodePX[b];
         const by = nodePY[b];
         const eDepth = (nodeDepth[a] + nodeDepth[b]) / 2;
-        const alpha = (0.08 + eDepth * 0.38) * latticeIn * latticeDim;
+        const alpha = (0.08 + eDepth * 0.38) * latticeIn * latticeDim * BLOOM_BOOST;
         const halfWidth = (0.8 + eDepth * 0.8) / 2;
         let dx = bx - ax;
         let dy = by - ay;
@@ -1016,58 +1038,58 @@ export function SignalField() {
 
   return (
     <group ref={groupRef}>
-      {/* Everything luminous — synapses, Lattice edges, the point — is
-          <Select>ed for the (optional) selective bloom pass. Glyph outlines,
-          spokes, and labels stay clean. */}
-      <Select enabled>
-        <mesh
-          ref={coreGlowRef}
-          geometry={planeGeometry}
-          material={coreGlowMaterial}
-          renderOrder={0}
-          visible={false}
-        />
-        <lineSegments
-          geometry={synapse.geometry}
-          material={synapse.material}
-          frustumCulled={false}
-          renderOrder={1}
-        />
-        <mesh
-          geometry={latticeEdges.geometry}
-          material={latticeEdges.material}
-          frustumCulled={false}
-          renderOrder={1}
-        />
-        <mesh
-          ref={pointGlowRef}
-          geometry={planeGeometry}
-          material={pointMaterials.glow}
-          renderOrder={0}
-          visible={false}
-        />
-        <lineLoop
-          ref={pointRingRef}
-          geometry={ringGeometry}
-          material={pointMaterials.ring}
-          renderOrder={2}
-          visible={false}
-        />
-        <mesh
-          ref={pointHaloRef}
-          geometry={planeGeometry}
-          material={pointMaterials.halo}
-          renderOrder={2}
-          visible={false}
-        />
-        <mesh
-          ref={pointCoreRef}
-          geometry={circleGeometry}
-          material={pointMaterials.core}
-          renderOrder={3}
-          visible={false}
-        />
-      </Select>
+      {/* Everything luminous — synapses, Lattice edges, the point — carries
+          a boosted (BLOOM_BOOST) additive color so the global <Bloom>
+          composer's luminance threshold picks it out on its own. Glyph
+          outlines, spokes, and labels stay at natural (sub-threshold)
+          brightness, so they never bloom. */}
+      <mesh
+        ref={coreGlowRef}
+        geometry={planeGeometry}
+        material={coreGlowMaterial}
+        renderOrder={0}
+        visible={false}
+      />
+      <lineSegments
+        geometry={synapse.geometry}
+        material={synapse.material}
+        frustumCulled={false}
+        renderOrder={1}
+      />
+      <mesh
+        geometry={latticeEdges.geometry}
+        material={latticeEdges.material}
+        frustumCulled={false}
+        renderOrder={1}
+      />
+      <mesh
+        ref={pointGlowRef}
+        geometry={planeGeometry}
+        material={pointMaterials.glow}
+        renderOrder={0}
+        visible={false}
+      />
+      <lineLoop
+        ref={pointRingRef}
+        geometry={ringGeometry}
+        material={pointMaterials.ring}
+        renderOrder={2}
+        visible={false}
+      />
+      <mesh
+        ref={pointHaloRef}
+        geometry={planeGeometry}
+        material={pointMaterials.halo}
+        renderOrder={2}
+        visible={false}
+      />
+      <mesh
+        ref={pointCoreRef}
+        geometry={circleGeometry}
+        material={pointMaterials.core}
+        renderOrder={3}
+        visible={false}
+      />
       {glyphs.map((glyph, i) => (
         <group
           key={glyph.id}
@@ -1091,25 +1113,23 @@ export function SignalField() {
               renderOrder={2}
             />
           </group>
-          <Select enabled>
-            <mesh
-              ref={(el) => {
-                glowRefs.current[i] = el;
-              }}
-              geometry={planeGeometry}
-              material={glowMaterials[i]}
-              renderOrder={2}
-              visible={false}
-            />
-            <mesh
-              ref={(el) => {
-                dotRefs.current[i] = el;
-              }}
-              geometry={dotGeometry}
-              material={glyph.dotMaterial}
-              renderOrder={3}
-            />
-          </Select>
+          <mesh
+            ref={(el) => {
+              glowRefs.current[i] = el;
+            }}
+            geometry={planeGeometry}
+            material={glowMaterials[i]}
+            renderOrder={2}
+            visible={false}
+          />
+          <mesh
+            ref={(el) => {
+              dotRefs.current[i] = el;
+            }}
+            geometry={dotGeometry}
+            material={glyph.dotMaterial}
+            renderOrder={3}
+          />
           <mesh
             ref={(el) => {
               labelRefs.current[i] = el;
