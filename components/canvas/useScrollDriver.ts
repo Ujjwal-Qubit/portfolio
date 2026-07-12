@@ -80,6 +80,7 @@ function calibrateBeats(): BeatRanges | null {
  */
 export function useScrollDriver() {
   useEffect(() => {
+    useCanvasStore.setState({ driverActive: true });
     gsap.registerPlugin(ScrollTrigger);
 
     const lenis = new Lenis({ autoRaf: false });
@@ -160,6 +161,7 @@ export function useScrollDriver() {
         activeBeat: "void",
         beats: BEATS,
         pointer: { x: 0, y: 0 },
+        driverActive: false,
       });
     };
   }, []);
