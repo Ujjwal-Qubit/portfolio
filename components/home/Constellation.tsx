@@ -12,7 +12,7 @@ const ENTRIES = [
 
 export function Constellation() {
   return (
-    <section id="constellation" className="scroll-mt-20 border-y border-signal/10">
+    <section id="constellation" className="border-y border-signal/10">
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 py-20 sm:grid-cols-3 sm:gap-6">
         {ENTRIES.map((entry, i) => (
           <Reveal key={entry.label} delay={i * 0.1} className="flex flex-col gap-2.5">
