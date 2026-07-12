@@ -819,15 +819,26 @@ export function SignalField() {
       // Labels: below the glyph until the morph, then front-facing nodes
       // only (depth > 0.45), small mono to the right; off while docked.
       // The position swap happens while the label is fully transparent.
+      // Labels live in their own identity-scale group (not a child of
+      // `item`), so both scale and position are computed directly in world
+      // space here — item's own scale/position never touches them.
       const label = labelRefs.current[i];
       if (label && glyph.labelW > 0) {
-        label.scale.set(glyph.labelW, glyph.labelH, 1); // uniform px→world via parent
+        label.scale.set(glyph.labelW * s, glyph.labelH * s, 1);
         if (synthP < 0.55) {
-          label.position.set(0, -LABEL_CENTER_Y, 0);
+          label.position.set(
+            item.position.x,
+            item.position.y - LABEL_CENTER_Y * s,
+            item.position.z,
+          );
           glyph.labelMaterial.opacity =
             LABEL_OPACITY * dim * (1 - Math.min(morphP * 2, 1));
         } else {
-          label.position.set(nodeRadius + NODE_LABEL_GAP + glyph.labelW / 2, 0, 0);
+          label.position.set(
+            item.position.x + (nodeRadius + NODE_LABEL_GAP + glyph.labelW / 2) * s,
+            item.position.y,
+            item.position.z,
+          );
           glyph.labelMaterial.opacity =
             (0.25 + depth * 0.55) *
             labelIn *
@@ -1130,16 +1141,27 @@ export function SignalField() {
             material={glyph.dotMaterial}
             renderOrder={3}
           />
-          <mesh
-            ref={(el) => {
-              labelRefs.current[i] = el;
-            }}
-            geometry={planeGeometry}
-            material={glyph.labelMaterial}
-            position={[0, -LABEL_CENTER_Y, 0]}
-            renderOrder={3}
-          />
         </group>
+      ))}
+      {/* Labels live in their own flat, identity-scale group — never as
+          children of a glyph's item/poly group. Those groups carry a
+          per-frame scale (item.scale = s, the CSS-px→world conversion) and
+          poly additionally animates its own scale through the morph; a
+          label parented there would inherit both, so its apparent size
+          would swim with every scale change instead of staying pixel-
+          accurate. Each label's position/scale is computed directly from
+          its glyph's world position each frame instead. */}
+      {glyphs.map((glyph, i) => (
+        <mesh
+          key={`${glyph.id}-label`}
+          ref={(el) => {
+            labelRefs.current[i] = el;
+          }}
+          geometry={planeGeometry}
+          material={glyph.labelMaterial}
+          renderOrder={3}
+          frustumCulled={false}
+        />
       ))}
     </group>
   );
