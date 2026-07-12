@@ -249,9 +249,9 @@ function buildGlyphs(): GlyphInstance[] {
   const rc = mulberry32(7);
   for (const glyph of glyphs) {
     const angle = (glyph.groupOrder / 4) * Math.PI * 2 + (rc() - 0.5) * 1.2;
-    const radius = 58 + rc() * 52;
-    glyph.clusterX = Math.cos(angle) * radius * 1.15;
-    glyph.clusterY = Math.sin(angle) * radius * 0.8;
+    const radius = 88 + rc() * 78;
+    glyph.clusterX = Math.cos(angle) * radius * 1.3;
+    glyph.clusterY = Math.sin(angle) * radius * 0.95;
     glyph.floatFx = 0.25 + rc() * 0.2;
     glyph.floatFy = 0.2 + rc() * 0.2;
     glyph.floatPhase = rc() * 6.28;
@@ -267,11 +267,11 @@ function buildGlyphs(): GlyphInstance[] {
 function clusterAnchor(group: number, w: number, h: number, out: number[]) {
   if (w < 768) {
     out[0] = w * 0.5;
-    out[1] = h * (0.3 + group * 0.25);
+    out[1] = h * (0.22 + group * 0.34);
     return;
   }
   out[0] = w * (0.2 + group * 0.3);
-  out[1] = h * (group === 1 ? 0.56 : 0.62);
+  out[1] = h * (group === 1 ? 0.62 : 0.7);
 }
 
 /**
