@@ -66,6 +66,12 @@ const POINT_CORE_RADIUS = 4.5;
  */
 const BLOOM_BOOST = 4;
 const CORE_GLOW_BOOST = 2.4;
+/**
+ * Peak node-glow opacity while a cluster is still forming (beat 2) — kept
+ * below the lattice-phase glow's own ceiling (up to 0.5) so it stays
+ * luminous rather than neon; the constellation hue does the rest.
+ */
+const CLUSTER_NODE_GLOW = 0.24;
 
 function boostedColor(hex: string, boost: number): THREE.Color {
   return new THREE.Color(hex).multiplyScalar(boost);
@@ -848,7 +854,12 @@ export function SignalField() {
       if (dot) {
         dot.scale.setScalar(THREE.MathUtils.lerp(1, nodeRadius / DOT_RADIUS, morphP));
       }
-      glyph.dotMaterial.color.lerpColors(hues.ink, hues[glyph.group], morphP);
+      // Nodes pick up their constellation hue as soon as they arrive in
+      // their cluster (gP), not only once the Lattice starts forming
+      // (morphP) — otherwise every node reads as plain ink white through
+      // the whole of beat 2, while its own web edges are already hued.
+      const clusterColorP = Math.max(gP, morphP);
+      glyph.dotMaterial.color.lerpColors(hues.ink, hues[glyph.group], clusterColorP);
       glyph.dotMaterial.opacity = THREE.MathUtils.lerp(
         DOT_OPACITY * dim,
         (0.35 + depth * 0.65) * latticeDim,
@@ -856,10 +867,15 @@ export function SignalField() {
       );
 
       // Node glow, depth-shaded (stands in for the prototype's shadowBlur
-      // until the bloom pass lands).
+      // until the bloom pass lands). A restrained version carries through
+      // beat 2 too — luminous, not neon — so each cluster's nodes glow in
+      // its own hue instead of staying dark until the Lattice appears;
+      // it hands off to the full lattice-phase glow as morphP ramps in.
       const glow = glowRefs.current[i];
       if (glow) {
-        const glowAlpha = latticeIn * latticeDim * (0.12 + depth * 0.38);
+        const clusterGlowAlpha = gP * (1 - morphP) * CLUSTER_NODE_GLOW;
+        const latticeGlowAlpha = latticeIn * latticeDim * (0.12 + depth * 0.38);
+        const glowAlpha = Math.max(clusterGlowAlpha, latticeGlowAlpha);
         glowMaterials[i].opacity = glowAlpha;
         glow.visible = glowAlpha > 0.004;
         if (glow.visible) glow.scale.setScalar(nodeRadius * 7);
