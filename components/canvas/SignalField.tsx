@@ -276,11 +276,34 @@ function buildGlyphs(): GlyphInstance[] {
 }
 
 /**
- * Where each constellation gathers, in CSS px. Spread across the viewport
- * behind the strip (matching its builder/mind/human column order); stacked
- * vertically on narrow viewports.
+ * Gap (CSS px) between a strip column's label and the top of its cluster
+ * anchor — tight, so the label reads as the cluster's title rather than an
+ * unrelated caption above it.
  */
-function clusterAnchor(group: number, w: number, h: number, out: number[]) {
+const CLUSTER_LABEL_GAP = 26;
+
+/**
+ * Where each constellation gathers, in CSS px — measured live off the
+ * strip's own column headers (#constellation-col-builder/mind/human) each
+ * frame, so every cluster sits directly under (and reads as belonging to)
+ * its own label at any viewport size or scroll position. Falls back to a
+ * fraction-based estimate before the strip has mounted/measured (or if a
+ * column element is ever missing).
+ */
+function clusterAnchor(
+  group: number,
+  w: number,
+  h: number,
+  columnX: Float32Array,
+  columnBottom: Float32Array,
+  columnFound: boolean[],
+  out: number[],
+) {
+  if (columnFound[group]) {
+    out[0] = columnX[group];
+    out[1] = columnBottom[group] + CLUSTER_LABEL_GAP;
+    return;
+  }
   if (w < 768) {
     out[0] = w * 0.5;
     out[1] = h * (0.22 + group * 0.34);
@@ -397,6 +420,8 @@ export function SignalField() {
   const pointCoreRef = useRef<THREE.Mesh>(null);
   /** The DOM contact glow the collapse lands on (queried lazily). */
   const contactGlowEl = useRef<HTMLElement | null>(null);
+  /** The strip's builder/mind/human column headers (queried lazily). */
+  const columnEls = useRef<(HTMLElement | null)[]>([null, null, null]);
   const driftTime = useRef(0);
 
   /** glyph index → its lattice node index. */
@@ -419,6 +444,10 @@ export function SignalField() {
   const nodeDepth = useMemo(() => new Float32Array(GLYPHS.length), []);
   const anchorScratch = useMemo(() => [0, 0], []);
   const dockScratch = useMemo(() => ({ x: 0, y: 0, r: 0 }), []);
+  /** Strip column header centers, measured live each frame; no allocations. */
+  const columnX = useMemo(() => new Float32Array(3), []);
+  const columnBottom = useMemo(() => new Float32Array(3), []);
+  const columnFound = useMemo(() => [false, false, false], []);
 
   const dotGeometry = useMemo(() => new THREE.CircleGeometry(DOT_RADIUS, 16), []);
   const planeGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
@@ -681,6 +710,26 @@ export function SignalField() {
       }
     }
 
+    // Live column positions the clusters bind to (see clusterAnchor) — only
+    // needed while clusters can be visible, so the strip's headers aren't
+    // measured every frame of every other beat.
+    if (clusterBeatP > 0 && morphP < 1) {
+      for (let g = 0; g < GROUPS.length; g++) {
+        if (!columnEls.current[g]) {
+          columnEls.current[g] = document.getElementById(
+            `constellation-col-${GROUPS[g]}`,
+          );
+        }
+        const colEl = columnEls.current[g];
+        if (colEl) {
+          const rect = colEl.getBoundingClientRect();
+          columnX[g] = rect.left + rect.width / 2;
+          columnBottom[g] = rect.bottom;
+          columnFound[g] = true;
+        }
+      }
+    }
+
     let latCX = 0;
     let latCY = 0;
     let latR = 0;
@@ -742,7 +791,7 @@ export function SignalField() {
         Math.min(Math.max((clusterBeatP - gStart) / 0.56, 0), 1),
       );
       clusterEase[i] = gP;
-      clusterAnchor(glyph.groupIndex, w, h, anchorScratch);
+      clusterAnchor(glyph.groupIndex, w, h, columnX, columnBottom, columnFound, anchorScratch);
       const kx =
         anchorScratch[0] +
         glyph.clusterX +
