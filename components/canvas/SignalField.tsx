@@ -188,8 +188,13 @@ function buildGlyphs(): GlyphInstance[] {
     const labelCanvas = document.createElement("canvas");
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
     labelTexture.colorSpace = THREE.SRGBColorSpace;
-    labelTexture.minFilter = THREE.LinearFilter;
-    labelTexture.generateMipmaps = false;
+    // Mipmapped minification, not disabled: the label plane renders smaller
+    // than its LABEL_SCALE-supersampled texture, and without a mip chain the
+    // GPU's bilinear filter point-samples too sparsely — thin-stroke glyphs
+    // (C, F) fall entirely between sample texels and vanish while denser
+    // letters survive. Mipmaps box-filter the minification correctly.
+    labelTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    labelTexture.generateMipmaps = true;
 
     return {
       id: def.id,
