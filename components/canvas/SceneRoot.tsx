@@ -3,6 +3,7 @@
 import { Canvas, useThree } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import { useEffect, useState } from "react";
+import * as THREE from "three";
 import { beatAt } from "@/lib/canvas/beats";
 import { useCanvasStore } from "@/lib/canvas/store";
 import { Dust } from "./Dust";
@@ -28,15 +29,24 @@ if (process.env.NODE_ENV === "development" && typeof window !== "undefined") {
  * scroll progress, advances the render loop manually (works even while the
  * tab is occluded and rAF is paused), and returns the canvas as a PNG data
  * URL — captured in the same task as the render, so no preserveDrawingBuffer
- * is needed. Compiled out of production bundles.
+ * is needed. `window.__scene` (+ `window.__THREE` and `window.__camera`)
+ * exposes the live scene graph alongside it, for checking object parent
+ * chains / world transforms (`obj.getWorldScale()`) or projecting world
+ * positions to screen space from outside the app. Compiled out of
+ * production bundles.
  */
 function DevSnapshot() {
   const gl = useThree((state) => state.gl);
   const advance = useThree((state) => state.advance);
+  const scene = useThree((state) => state.scene);
+  const camera = useThree((state) => state.camera);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return undefined;
     const w = window as unknown as Record<string, unknown>;
+    w.__scene = scene;
+    w.__THREE = THREE;
+    w.__camera = camera;
     w.__snapCanvas = (progress?: number) => {
       if (typeof progress === "number") {
         useCanvasStore.setState({
@@ -50,8 +60,11 @@ function DevSnapshot() {
     };
     return () => {
       delete w.__snapCanvas;
+      delete w.__scene;
+      delete w.__THREE;
+      delete w.__camera;
     };
-  }, [gl, advance]);
+  }, [gl, advance, scene, camera]);
   return null;
 }
 
