@@ -1355,6 +1355,7 @@ export function SignalField() {
       {glyphs.map((glyph, i) => (
         <mesh
           key={`${glyph.id}-label`}
+          name={`glyph-label-${glyph.id}`}
           ref={(el) => {
             labelRefs.current[i] = el;
           }}
