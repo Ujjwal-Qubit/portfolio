@@ -41,6 +41,15 @@ const SYNAPSE_OPACITY = 0.22;
 
 /** Beat 2: clustered glyphs keep a small local float so drift never dies. */
 const CLUSTER_FLOAT_PX = 7;
+// Seeded cluster-formation radius (CSS px) and its elliptical x/y spread —
+// shared between buildGlyphs (per-glyph seed) and computeClusterLayout
+// (the runtime cap on how much of that spread actually fits on screen).
+const CLUSTER_RADIUS_MIN = 88;
+const CLUSTER_RADIUS_SPAN = 78;
+const CLUSTER_ELLIPSE_X = 1.3;
+const CLUSTER_ELLIPSE_Y = 0.95;
+const CLUSTER_MAX_X_EXTENT = (CLUSTER_RADIUS_MIN + CLUSTER_RADIUS_SPAN) * CLUSTER_ELLIPSE_X;
+const CLUSTER_MAX_Y_EXTENT = (CLUSTER_RADIUS_MIN + CLUSTER_RADIUS_SPAN) * CLUSTER_ELLIPSE_Y;
 
 // Beat 3 — THE LATTICE (prototype numbers; px are CSS px).
 const LATTICE_PERSP = 1100;
@@ -271,9 +280,9 @@ function buildGlyphs(): GlyphInstance[] {
   const rc = mulberry32(7);
   for (const glyph of glyphs) {
     const angle = (glyph.groupOrder / 4) * Math.PI * 2 + (rc() - 0.5) * 1.2;
-    const radius = 88 + rc() * 78;
-    glyph.clusterX = Math.cos(angle) * radius * 1.3;
-    glyph.clusterY = Math.sin(angle) * radius * 0.95;
+    const radius = CLUSTER_RADIUS_MIN + rc() * CLUSTER_RADIUS_SPAN;
+    glyph.clusterX = Math.cos(angle) * radius * CLUSTER_ELLIPSE_X;
+    glyph.clusterY = Math.sin(angle) * radius * CLUSTER_ELLIPSE_Y;
     glyph.floatFx = 0.25 + rc() * 0.2;
     glyph.floatFy = 0.2 + rc() * 0.2;
     glyph.floatPhase = rc() * 6.28;
@@ -281,42 +290,153 @@ function buildGlyphs(): GlyphInstance[] {
   return glyphs;
 }
 
+// Clearances (CSS px) used by computeClusterLayout.
+/** Space kept clear between a column's text block and any cluster above/below it. */
+const CLUSTER_TEXT_MARGIN = 32;
+/** Space kept clear from the viewport's left/right/bottom edges. */
+const CLUSTER_EDGE_MARGIN = 48;
+/** Space kept clear between two side-by-side clusters' safe zones. */
+const CLUSTER_GAP_MARGIN = 36;
+/** Below this, two columns are treated as stacked (same X) rather than side by side. */
+const CLUSTER_SIDE_BY_SIDE_MIN_DX = 40;
+/** Never shrink a cluster's formation below this fraction of its nominal spread. */
+const CLUSTER_MIN_SCALE = 0.45;
 /**
- * Gap (CSS px) between a strip column's label and the top of its cluster
- * anchor — tight, so the label reads as the cluster's title rather than an
- * unrelated caption above it.
+ * Same idea for stacked (mobile) bands specifically, but much lower: three
+ * clusters sharing one column can end up with very little vertical room
+ * each, and staying non-overlapping there matters more than holding a
+ * "still looks substantial" floor — a small correct cluster beats a
+ * bigger one that bleeds into its neighbor's band.
  */
-const CLUSTER_LABEL_GAP = 26;
+const CLUSTER_STACK_MIN_SCALE = 0.2;
+/**
+ * Minimum vertical band height per stacked cluster (CSS px), even on a
+ * viewport too short to fit the nominal edge margin below the last text
+ * block — without this floor, three bands can collapse to zero height and
+ * every cluster lands on the exact same point (see computeClusterLayout).
+ */
+const CLUSTER_STACK_MIN_BAND = 70;
+
+function fallbackClusterLayout(
+  w: number,
+  h: number,
+  g: number,
+  outX: Float32Array,
+  outY: Float32Array,
+  outScale: Float32Array,
+) {
+  if (w < 768) {
+    outX[g] = w * 0.5;
+    outY[g] = h * (0.22 + g * 0.34);
+  } else {
+    outX[g] = w * (0.2 + g * 0.3);
+    outY[g] = h * (g === 1 ? 0.62 : 0.7);
+  }
+  outScale[g] = 1;
+}
 
 /**
- * Where each constellation gathers, in CSS px — measured live off the
- * strip's own column headers (#constellation-col-builder/mind/human) each
- * frame, so every cluster sits directly under (and reads as belonging to)
- * its own label at any viewport size or scroll position. Falls back to a
- * fraction-based estimate before the strip has mounted/measured (or if a
- * column element is ever missing).
+ * Where each constellation gathers and how much of its seeded formation
+ * radius actually fits — measured live off the strip's own column blocks
+ * (#constellation-col-builder/mind/human) each frame, so every cluster
+ * sits directly under (and reads as belonging to) its own label at any
+ * viewport size or scroll position:
+ *
+ * - x is always the column's own center (never adjusted — the label must
+ *   stay directly above its cluster).
+ * - When the columns sit side by side (their x centers differ), y is the
+ *   midpoint of the space below that column's text and above the viewport's
+ *   bottom edge, and scale is capped by the horizontal room beside its
+ *   neighbors and the viewport edges.
+ * - When the columns are stacked (narrow viewports — all x centers
+ *   coincide), the three text blocks sit close together with no real gap
+ *   between them, so there's no room to interleave a cluster after each
+ *   one individually: instead every cluster shares the single region below
+ *   the LAST text block, divided into one vertical band per column (in
+ *   their stacked order), each non-overlapping.
+ * - scale never adjusts the anchor itself — only how much of the glyphs'
+ *   seeded cluster offsets apply — so a cluster that can't fit its full
+ *   nominal spread still reads as a smaller, intact formation rather than
+ *   clipping or colliding. Side-by-side scale has a moderate floor
+ *   (CLUSTER_MIN_SCALE); stacked bands can be much tighter, so staying
+ *   non-overlapping there takes priority over that floor
+ *   (CLUSTER_STACK_MIN_SCALE).
+ *
+ * Falls back to a fraction-based estimate (scale 1) before the strip has
+ * mounted/measured.
  */
-function clusterAnchor(
-  group: number,
+function computeClusterLayout(
   w: number,
   h: number,
   columnX: Float32Array,
+  columnTop: Float32Array,
   columnBottom: Float32Array,
   columnFound: boolean[],
-  out: number[],
+  outX: Float32Array,
+  outY: Float32Array,
+  outScale: Float32Array,
 ) {
-  if (columnFound[group]) {
-    out[0] = columnX[group];
-    out[1] = columnBottom[group] + CLUSTER_LABEL_GAP;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let anyFound = false;
+  for (let g = 0; g < 3; g++) {
+    if (!columnFound[g]) continue;
+    anyFound = true;
+    minX = Math.min(minX, columnX[g]);
+    maxX = Math.max(maxX, columnX[g]);
+  }
+  const stacked = anyFound && maxX - minX < CLUSTER_SIDE_BY_SIDE_MIN_DX;
+
+  if (stacked) {
+    const order = [0, 1, 2]
+      .filter((g) => columnFound[g])
+      .sort((a, b) => columnTop[a] - columnTop[b]);
+    let lastBottom = 0;
+    for (const g of order) lastBottom = Math.max(lastBottom, columnBottom[g]);
+    const top = lastBottom + CLUSTER_TEXT_MARGIN;
+    // Guarantee real separation between bands even when the viewport is too
+    // short for all three text blocks plus the usual bottom margin to fit —
+    // better to run past the nominal edge margin than to have every band
+    // collapse to the same point.
+    const minBottom = top + CLUSTER_STACK_MIN_BAND * order.length;
+    const bottom = Math.max(h - CLUSTER_EDGE_MARGIN, minBottom);
+    const bandHeight = (bottom - top) / order.length;
+    order.forEach((g, i) => {
+      outX[g] = columnX[g];
+      outY[g] = top + bandHeight * (i + 0.5);
+      const sideSpace = Math.min(columnX[g] - CLUSTER_EDGE_MARGIN, w - CLUSTER_EDGE_MARGIN - columnX[g]);
+      const scaleY = bandHeight / 2 / CLUSTER_MAX_Y_EXTENT;
+      const scaleX = sideSpace / CLUSTER_MAX_X_EXTENT;
+      outScale[g] = THREE.MathUtils.clamp(Math.min(scaleX, scaleY, 1), CLUSTER_STACK_MIN_SCALE, 1);
+    });
+    for (let g = 0; g < 3; g++) {
+      if (!columnFound[g]) fallbackClusterLayout(w, h, g, outX, outY, outScale);
+    }
     return;
   }
-  if (w < 768) {
-    out[0] = w * 0.5;
-    out[1] = h * (0.22 + group * 0.34);
-    return;
+
+  for (let g = 0; g < 3; g++) {
+    if (!columnFound[g]) {
+      fallbackClusterLayout(w, h, g, outX, outY, outScale);
+      continue;
+    }
+
+    outX[g] = columnX[g];
+    const upper = columnBottom[g] + CLUSTER_TEXT_MARGIN;
+    const lower = Math.max(h - CLUSTER_EDGE_MARGIN, upper);
+    outY[g] = (upper + lower) / 2;
+
+    let sideSpace = Math.min(columnX[g] - CLUSTER_EDGE_MARGIN, w - CLUSTER_EDGE_MARGIN - columnX[g]);
+    for (let g2 = 0; g2 < 3; g2++) {
+      if (g2 === g || !columnFound[g2]) continue;
+      const dx = Math.abs(columnX[g2] - columnX[g]);
+      sideSpace = Math.min(sideSpace, dx / 2 - CLUSTER_GAP_MARGIN);
+    }
+
+    const scaleY = (lower - upper) / 2 / CLUSTER_MAX_Y_EXTENT;
+    const scaleX = sideSpace / CLUSTER_MAX_X_EXTENT;
+    outScale[g] = THREE.MathUtils.clamp(Math.min(scaleX, scaleY, 1), CLUSTER_MIN_SCALE, 1);
   }
-  out[0] = w * (0.2 + group * 0.3);
-  out[1] = h * (group === 1 ? 0.62 : 0.7);
 }
 
 /**
@@ -448,12 +568,16 @@ export function SignalField() {
   const nodePX = useMemo(() => new Float32Array(GLYPHS.length), []);
   const nodePY = useMemo(() => new Float32Array(GLYPHS.length), []);
   const nodeDepth = useMemo(() => new Float32Array(GLYPHS.length), []);
-  const anchorScratch = useMemo(() => [0, 0], []);
   const dockScratch = useMemo(() => ({ x: 0, y: 0, r: 0 }), []);
-  /** Strip column header centers, measured live each frame; no allocations. */
+  /** Strip column text blocks, measured live each frame; no allocations. */
   const columnX = useMemo(() => new Float32Array(3), []);
+  const columnTop = useMemo(() => new Float32Array(3), []);
   const columnBottom = useMemo(() => new Float32Array(3), []);
   const columnFound = useMemo(() => [false, false, false], []);
+  /** Per-group cluster layout, resolved once per frame (see computeClusterLayout). */
+  const clusterAnchorX = useMemo(() => new Float32Array(3), []);
+  const clusterAnchorY = useMemo(() => new Float32Array(3), []);
+  const clusterScale = useMemo(() => new Float32Array(3), []);
 
   const dotGeometry = useMemo(() => new THREE.CircleGeometry(DOT_RADIUS, 16), []);
   const planeGeometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
@@ -716,9 +840,9 @@ export function SignalField() {
       }
     }
 
-    // Live column positions the clusters bind to (see clusterAnchor) — only
-    // needed while clusters can be visible, so the strip's headers aren't
-    // measured every frame of every other beat.
+    // Live column positions the clusters bind to (see computeClusterLayout)
+    // — only needed while clusters can be visible, so the strip's text
+    // blocks aren't measured every frame of every other beat.
     if (clusterBeatP > 0 && morphP < 1) {
       for (let g = 0; g < GROUPS.length; g++) {
         if (!columnEls.current[g]) {
@@ -730,10 +854,22 @@ export function SignalField() {
         if (colEl) {
           const rect = colEl.getBoundingClientRect();
           columnX[g] = rect.left + rect.width / 2;
+          columnTop[g] = rect.top;
           columnBottom[g] = rect.bottom;
           columnFound[g] = true;
         }
       }
+      computeClusterLayout(
+        w,
+        h,
+        columnX,
+        columnTop,
+        columnBottom,
+        columnFound,
+        clusterAnchorX,
+        clusterAnchorY,
+        clusterScale,
+      );
     }
 
     let latCX = 0;
@@ -797,14 +933,14 @@ export function SignalField() {
         Math.min(Math.max((clusterBeatP - gStart) / 0.56, 0), 1),
       );
       clusterEase[i] = gP;
-      clusterAnchor(glyph.groupIndex, w, h, columnX, columnBottom, columnFound, anchorScratch);
+      const cScale = clusterScale[glyph.groupIndex];
       const kx =
-        anchorScratch[0] +
-        glyph.clusterX +
+        clusterAnchorX[glyph.groupIndex] +
+        glyph.clusterX * cScale +
         Math.sin(t * glyph.floatFx + glyph.floatPhase) * CLUSTER_FLOAT_PX * gP;
       const ky =
-        anchorScratch[1] +
-        glyph.clusterY +
+        clusterAnchorY[glyph.groupIndex] +
+        glyph.clusterY * cScale +
         Math.cos(t * glyph.floatFy + glyph.floatPhase) * CLUSTER_FLOAT_PX * gP;
 
       // Beat 3: contract onto the Lattice node this glyph becomes.
