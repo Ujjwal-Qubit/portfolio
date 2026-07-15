@@ -1,6 +1,6 @@
 "use client";
 
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { rangeProgress } from "@/lib/canvas/beats";
@@ -32,7 +32,9 @@ const OUTLINE_OPACITY = 0.5;
 const SPOKE_OPACITY = 0.16;
 const DOT_OPACITY = 0.85;
 const DOT_RADIUS = 1.6;
-const LABEL_OPACITY = 0.55;
+const LABEL_OPACITY = 0.75;
+/** A label's rendered opacity never dims below this, even at screen center. */
+const LABEL_DIM_FLOOR = 0.45;
 const LABEL_FONT_PX = 10;
 /** Prototype sets the label baseline at +44px; ≈ visual center for 10px type. */
 const LABEL_CENTER_Y = 40.5;
@@ -94,8 +96,13 @@ function boostedColor(hex: string, boost: number): THREE.Color {
  */
 const LABEL_FONT_URL = "/fonts/JetBrainsMono-Regular.ttf";
 const LABEL_FONT_FAMILY = "GlyphFieldMono";
-/** Supersample factor for the label textures so they stay crisp at dpr 2. */
-const LABEL_SCALE = 4;
+/**
+ * Label planes are screen-facing at a near-constant CSS-px size (see
+ * `drawLabel`), so there's no benefit to supersampling: the texture is
+ * sized to exactly the plane's on-screen device-pixel footprint
+ * (CSS px × devicePixelRatio) for 1:1 texel-to-pixel rendering — crisp,
+ * with no minification and therefore no mip blur.
+ */
 
 const GROUPS: GlyphConstellation[] = ["builder", "mind", "human"];
 
@@ -219,13 +226,12 @@ function buildGlyphs(): GlyphInstance[] {
     const labelCanvas = document.createElement("canvas");
     const labelTexture = new THREE.CanvasTexture(labelCanvas);
     labelTexture.colorSpace = THREE.SRGBColorSpace;
-    // Mipmapped minification, not disabled: the label plane renders smaller
-    // than its LABEL_SCALE-supersampled texture, and without a mip chain the
-    // GPU's bilinear filter point-samples too sparsely — thin-stroke glyphs
-    // (C, F) fall entirely between sample texels and vanish while denser
-    // letters survive. Mipmaps box-filter the minification correctly.
-    labelTexture.minFilter = THREE.LinearMipmapLinearFilter;
-    labelTexture.generateMipmaps = true;
+    // drawLabel sizes the canvas to the label plane's exact on-screen device
+    // pixel size, so the texture is never minified — no mip chain needed,
+    // and none of the mip blur that used to soften every glyph.
+    labelTexture.minFilter = THREE.LinearFilter;
+    labelTexture.magFilter = THREE.LinearFilter;
+    labelTexture.generateMipmaps = false;
 
     return {
       id: def.id,
@@ -506,31 +512,36 @@ function dockTarget(w: number, h: number, out: { x: number; y: number; r: number
 }
 
 /**
- * Renders one label into its canvas at LABEL_SCALE× and records the plane
- * size in CSS px. Only called once the TTF is resident (or its load failed),
- * so measureText always uses the metrics of the face actually drawn.
+ * Renders one label into its canvas at exactly its on-screen device-pixel
+ * size (CSS px × dpr) and records the plane size in CSS px. Only called
+ * once the TTF is resident (or its load failed), so measureText always uses
+ * the metrics of the face actually drawn. Re-run whenever dpr can have
+ * changed (e.g. the window moves to a different-DPI monitor) so the texture
+ * stays 1:1 with the new device pixel grid.
  */
-function drawLabel(glyph: GlyphInstance) {
+function drawLabel(glyph: GlyphInstance, dpr: number) {
   const ctx = glyph.labelCanvas.getContext("2d");
   if (!ctx) return;
-  const k = LABEL_SCALE;
-  const font = `${LABEL_FONT_PX * k}px "${LABEL_FONT_FAMILY}", monospace`;
-  ctx.font = font;
-  const w = Math.max(Math.ceil(ctx.measureText(glyph.text).width) + 2 * k, 2);
-  const h = (LABEL_FONT_PX + 4) * k;
+  const cssFont = `${LABEL_FONT_PX}px "${LABEL_FONT_FAMILY}", monospace`;
+  ctx.font = cssFont;
+  const cssW = Math.max(Math.ceil(ctx.measureText(glyph.text).width) + 2, 2);
+  const cssH = LABEL_FONT_PX + 4;
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
   glyph.labelCanvas.width = w; // resizing resets ctx state
   glyph.labelCanvas.height = h;
-  ctx.font = font;
+  ctx.font = `${LABEL_FONT_PX * dpr}px "${LABEL_FONT_FAMILY}", monospace`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = MUTE;
   ctx.fillText(glyph.text, w / 2, h / 2);
-  glyph.labelW = w / k;
-  glyph.labelH = h / k;
+  glyph.labelW = cssW;
+  glyph.labelH = cssH;
   glyph.labelTexture.needsUpdate = true;
 }
 
 export function SignalField() {
+  const { gl } = useThree();
   const glyphs = useMemo(buildGlyphs, []);
   const lattice = useMemo(buildLattice, []);
   const groupRef = useRef<THREE.Group>(null);
@@ -745,22 +756,43 @@ export function SignalField() {
   // (offline dev?) draw anyway — monospace fallback beats missing labels.
   useEffect(() => {
     let cancelled = false;
+    let fontReady = false;
     const drawAll = () => {
       if (cancelled) return;
-      for (const glyph of glyphs) drawLabel(glyph);
+      const dpr = gl.getPixelRatio();
+      for (const glyph of glyphs) drawLabel(glyph, dpr);
     };
     const face = new FontFace(LABEL_FONT_FAMILY, `url(${LABEL_FONT_URL})`);
     face
       .load()
       .then((loaded) => {
         document.fonts.add(loaded);
+        fontReady = true;
         drawAll();
       })
-      .catch(drawAll);
+      .catch(() => {
+        fontReady = true;
+        drawAll();
+      });
+
+    // devicePixelRatio can change without the label's CSS-px size changing
+    // (e.g. the window drags to a different-DPI monitor) — recheck on
+    // resize and redraw at the new pixel ratio so the texture stays 1:1.
+    let lastDpr = gl.getPixelRatio();
+    const onResize = () => {
+      if (!fontReady) return;
+      const dpr = gl.getPixelRatio();
+      if (dpr !== lastDpr) {
+        lastDpr = dpr;
+        drawAll();
+      }
+    };
+    window.addEventListener("resize", onResize);
     return () => {
       cancelled = true;
+      window.removeEventListener("resize", onResize);
     };
-  }, [glyphs]);
+  }, [glyphs, gl]);
 
   useFrame((state, delta) => {
     const group = groupRef.current;
@@ -964,6 +996,10 @@ export function SignalField() {
 
       // Dim near screen center so the hero type dominates — relaxes away as
       // the clusters form (the name is gone from the viewport by then).
+      // Glyph bodies (outline/spoke/dot) take the full dim; the label's
+      // *final* opacity (below) is floored at LABEL_DIM_FLOOR so
+      // center-ish ones (psychology, startups) stay legible instead of
+      // dropping toward unreadable near screen center.
       const centerDist = Math.hypot((cx / w) * 2 - 1, (cy / h) * 2 - 1);
       const heroDim = 0.35 + 0.65 * THREE.MathUtils.smoothstep(centerDist, 0.12, 0.5);
       const dim = THREE.MathUtils.lerp(heroDim, 1, clusterBeatP);
@@ -1033,7 +1069,8 @@ export function SignalField() {
             item.position.z,
           );
           glyph.labelMaterial.opacity =
-            LABEL_OPACITY * dim * (1 - Math.min(morphP * 2, 1));
+            Math.max(LABEL_OPACITY * dim, LABEL_DIM_FLOOR) *
+            (1 - Math.min(morphP * 2, 1));
         } else {
           label.position.set(
             item.position.x + (nodeRadius + NODE_LABEL_GAP + glyph.labelW / 2) * s,

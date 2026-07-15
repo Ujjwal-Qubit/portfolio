@@ -99,7 +99,7 @@ export default function SceneRoot() {
       <Canvas
         frameloop={frameloop}
         dpr={[1, 2]}
-        gl={{ alpha: true, antialias: true, powerPreference: "high-performance" }}
+        gl={{ alpha: true, antialias: true, powerPreference: "high-performance", preserveDrawingBuffer: true }}
         camera={{ position: [0, 0, 10], fov: 50 }}
         onCreated={() => setReady(true)}
       >
